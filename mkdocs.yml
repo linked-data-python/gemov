@@ -1,0 +1,59 @@
+site_name: GEMOV
+site_description: >-
+  Generating Modular Ontologies and Vocabularies — dimensions, modules and
+  patterns over rdflib, with profiles, checks, generated documentation and a
+  server for the namespace.
+site_url: https://gemov.readthedocs.io/
+repo_url: https://github.com/linked-data-python/gemov
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      toggle: { icon: material/weather-sunny, name: Light mode }
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.highlight: { anchor_linenums: true }
+  - pymdownx.inlinehilite
+  - pymdownx.snippets: { base_path: [docs, .], check_paths: true }
+  - pymdownx.superfences
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - The model:
+      - model/index.md
+      - Dimensions and items: model/dimensions.md
+      - Modules: model/modules.md
+      - Patterns, roles and degree: model/patterns.md
+      - Profiles: model/profiles.md
+  - Guides:
+      - Write a vocabulary: guides/write-a-vocabulary.md
+      - Patterns in Linked-Data Python: guides/ldpy.md
+      - Check a vocabulary: guides/check.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - Python API: reference/api.md
+      - Command line: reference/cli.md
+  - Publishing:
+      - Generated documentation: publish/documentation.md
+      - Serving the namespace: publish/server.md
+  - Why:
+      - The polynomial model: why/polynomial.md

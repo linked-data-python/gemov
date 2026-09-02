@@ -15,7 +15,12 @@ dependencies = ["rdflib>=6.0", "PyYAML>=6.0"]
 [project.optional-dependencies]
 # patterns may be written in Turtle's own notation, inside Python
 ldpy = ["linked-data-python>=0.6"]
-dev = ["pytest"]
+# the documentation generator asks the graph its questions in ldpy
+docs = ["linked-data-python>=0.6"]
+# the HTTP server: one namespace, modular and versioned, plus views on demand
+server = ["flask>=3.0", "linked-data-python>=0.6"]
+site = ["mkdocs", "mkdocs-material"]
+dev = ["pytest", "flask>=3.0", "linked-data-python>=0.6"]
 
 [project.scripts]
 gemov = "gemov.cli:main"

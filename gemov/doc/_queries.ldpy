@@ -1,0 +1,77 @@
+# What a documentation page asks the graph, in Linked-Data Python.
+#
+# The queries are the point: what a documentation page needs from an ontology
+# is a handful of graph patterns — the label, the comment, the parents, what
+# subsumes it, what has it as domain or range. Written in Turtle's own
+# notation they read as what they are, and the surrounding Python is ordinary.
+#
+# Everything here is pure reading: the HTML is assembled in render.py.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix vs:   <http://www.w3.org/2003/06/sw-vocab-status/ns#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+from rdflib import URIRef
+
+
+def describe(graph, iri):
+    """Everything a term's page shows, in one pass over the graph."""
+    term = URIRef(iri) if not isinstance(iri, URIRef) else iri
+    @graph graph
+
+    labels = [str(o) for o in m{ {term} rdfs:label ?l }]
+    comments = [str(o) for o in m{ {term} rdfs:comment ?c }]
+    preferred = [str(o) for o in m{ {term} skos:prefLabel ?p }]
+    status = [str(o) for o in m{ {term} vs:term_status ?s }]
+    defined_by = [str(o) for o in m{ {term} rdfs:isDefinedBy ?d }]
+
+    kinds = [str(o) for o in m{ {term} a ?t }]
+    parents = [str(o) for o in m{ {term} rdfs:subClassOf ?p } if isinstance(o, URIRef)]
+    equivalents = [str(o) for o in m{ {term} owl:equivalentClass ?e } if isinstance(o, URIRef)]
+
+    # what points at it, which is what tells a reader where the term is used
+    children = [str(s) for s in m{ ?s rdfs:subClassOf {term} }]
+    domain_of = [str(s) for s in m{ ?s rdfs:domain {term} }]
+    range_of = [str(s) for s in m{ ?s rdfs:range {term} }]
+    sub_properties = [str(s) for s in m{ ?s rdfs:subPropertyOf {term} }]
+
+    return {
+        "iri": str(term),
+        "labels": labels, "comments": comments, "preferred": preferred,
+        "status": status[0] if status else None,
+        "defined_by": defined_by,
+        "kinds": kinds, "parents": parents, "equivalents": equivalents,
+        "children": sorted(children), "domain_of": sorted(domain_of),
+        "range_of": sorted(range_of), "sub_properties": sorted(sub_properties),
+    }
+
+
+def module_contents(graph, module_iri):
+    """The terms a module defines, split by what they are."""
+    module = URIRef(module_iri) if not isinstance(module_iri, URIRef) else module_iri
+    @graph graph
+    classes, properties, other = [], [], []
+    for s in m{ ?s rdfs:isDefinedBy {module} }:
+        kinds = {str(k) for k in m{ {s} a ?k }}
+        if str(owl:Class) in kinds:
+            classes.append(str(s))
+        elif kinds & {str(owl:ObjectProperty), str(owl:DatatypeProperty),
+                      str(owl:AnnotationProperty)}:
+            properties.append(str(s))
+        else:
+            other.append(str(s))
+    return {"classes": sorted(classes), "properties": sorted(properties),
+            "other": sorted(other)}
+
+
+def ontology_header(graph, module_iri):
+    """The module's own metadata, for the top of its page."""
+    module = URIRef(module_iri) if not isinstance(module_iri, URIRef) else module_iri
+    @graph graph
+    return {
+        "iri": str(module),
+        "titles": [str(o) for o in m{ {module} <http://purl.org/dc/terms/title> ?t }],
+        "descriptions": [str(o) for o in m{ {module} <http://purl.org/dc/terms/description> ?d }],
+        "issued": [str(o) for o in m{ {module} <http://purl.org/dc/terms/issued> ?i }],
+        "imports": [str(o) for o in m{ {module} owl:imports ?i }],
+    }

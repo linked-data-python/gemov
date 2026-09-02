@@ -3,6 +3,8 @@
     gemov build   vocabulary.yml [-o out/] [--format turtle]
     gemov profile vocabulary.yml quantity=Temperature aggregation=Average
     gemov check   vocabulary.yml
+    gemov docs    vocabulary.yml -o site/        # needs [docs]
+    gemov serve   vocabulary.yml                 # needs [server]
 """
 
 import argparse
@@ -45,8 +47,51 @@ def main(argv=None):
     chk = sub.add_parser("check", help="report the coherence findings")
     chk.add_argument("config")
 
+    docs = sub.add_parser("docs", help="write the documentation site")
+    docs.add_argument("config")
+    docs.add_argument("-o", "--out", default="site")
+    docs.add_argument("--prefix", default="")
+
+    serve = sub.add_parser("serve", help="serve the vocabulary over HTTP")
+    serve.add_argument("config", nargs="?")
+    serve.add_argument("--files", nargs="+")
+    serve.add_argument("--namespace")
+    serve.add_argument("--prefix", default="")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=5000)
+
     args = parser.parse_args(argv)
+
+    if args.command == "serve":
+        try:
+            from .server import from_config, from_files
+        except ImportError:
+            raise SystemExit("the server is optional: pip install 'gemov[server]'")
+        if args.config:
+            application = from_config(Config.load(args.config), args.prefix)
+        elif args.files:
+            if not args.namespace:
+                raise SystemExit("--files needs --namespace")
+            application = from_files(args.files, args.namespace, args.prefix)
+        else:
+            raise SystemExit("give a configuration, or --files with --namespace")
+        source = application.config["SOURCE"]
+        print("%d modules in %s" % (len(source.modules()), source.namespace))
+        application.run(host=args.host, port=args.port)
+        return 0
+
     config = Config.load(args.config)
+
+    if args.command == "docs":
+        try:
+            from .doc import write_site
+            from .server.source import Generated
+        except ImportError as exc:
+            raise SystemExit("the documentation needs Linked-Data Python: "
+                             "pip install 'gemov[docs]' (%s)" % exc)
+        written = write_site(Generated(config), args.out, args.prefix, config)
+        print("%d pages in %s" % (len(written), args.out))
+        return 0
 
     if args.command == "build":
         context = config.generate()

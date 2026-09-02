@@ -127,15 +127,40 @@ $ gemov profile examples/seas/vocabulary.yml quantity=Temperature kind=Mechanica
       because https://w3id.org/seas/TemperatureProperty refers to it
 ```
 
+## Documentation, and a server for the namespace
+
+A generated vocabulary can document itself, including the **rules** that
+minted it — a page per pattern, with its degree and the roles of its
+dimensions, which a hand-written ontology cannot have:
+
+```text
+gemov docs  vocabulary.yml -o site/     # a static site, pyLODE-shaped
+gemov serve vocabulary.yml              # the namespace over HTTP, with views
+```
+
+The server answers for one namespace, modular and versioned: content
+negotiation, versioned and unversioned IRIs, and `/view?…` which assembles a
+graph from the modules, terms and dimension items a query names. Both are
+optional extras.
+
 ## Use
 
 ```text
-pip install -e .              # rdflib and PyYAML; add [ldpy] for the notation
+pip install -e .              # the generator: rdflib and PyYAML
+pip install -e .[docs]        # + the documentation generator (uses ldpy)
+pip install -e .[server]      # + the HTTP server (Flask)
+
 gemov build   vocabulary.yml -o out/
 gemov profile vocabulary.yml quantity=Temperature --explain
 gemov check   vocabulary.yml
+gemov docs    vocabulary.yml -o site/
+gemov serve   vocabulary.yml
 python -m pytest tests
 ```
+
+**The full documentation is in `docs/`** (mkdocs, readthedocs-ready):
+`mkdocs serve`. It is where dimensions, items, modules, patterns, roles,
+degree, profiles and the access contract are defined.
 
 ## Layout
 
@@ -145,8 +170,12 @@ gemov/context.py    dimensions, modules, term ownership, the product
 gemov/config.py     the YAML model, with `import`
 gemov/profile.py    selection, closure, explanation
 gemov/check.py      the coherence rules
-gemov/cli.py        gemov build | profile | check
+gemov/cli.py        build | profile | check | docs | serve
+gemov/doc/          the documentation generator; its queries are in ldpy
+gemov/server/       the HTTP server, over a source of modules
 examples/seas/      the demonstration of record ottr/302, in Python and in ldpy
+docs/               this project's own documentation
 ```
 
-Design decisions are recorded in the `pilotage` repository, record `ottr/302`.
+Design decisions are recorded in the `pilotage` repository, records `ottr/302`
+and `ottr/308`.
