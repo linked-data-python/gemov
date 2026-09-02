@@ -1,0 +1,39 @@
+# The demonstration of record ottr/302: the shape SEAS 1.0 writes by hand,
+# generated instead. Three quantities and one aggregation here; the real
+# vocabulary has 99 quantities, and the file would not grow.
+base: https://w3id.org/seas/
+prefixes:
+  seas: https://w3id.org/seas/
+  owl: http://www.w3.org/2002/07/owl#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  vs: http://www.w3.org/2003/06/sw-vocab-status/ns#
+
+dimensions:
+  quantity:
+    Temperature: { kind: ThermodynamicQuantity }
+    Humidity: { kind: ThermodynamicQuantity }
+    Pressure: { kind: MechanicalQuantity }
+  aggregation:
+    Average: {}
+  kind:
+    - ThermodynamicQuantity
+    - MechanicalQuantity
+
+modules:
+  UpperOntology:
+    title: The SEAS upper ontology
+    patterns:
+      patterns.upper: []
+  QuantityKindVocabulary:
+    title: The SEAS quantity kind vocabulary
+    patterns:
+      patterns.quantity_kind: [ kind ]
+  GenericPropertyOntology:
+    title: The SEAS generic property ontology
+    patterns:
+      patterns.property_family: [ quantity ]
+  StatisticsOntology:
+    title: The SEAS statistics ontology
+    patterns:
+      patterns.aggregation_class: [ aggregation ]
+      patterns.aggregated_evaluation: [ aggregation, quantity ]

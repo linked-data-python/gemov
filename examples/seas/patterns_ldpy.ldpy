@@ -1,0 +1,111 @@
+# The same patterns as `patterns.py`, written in Linked-Data Python: the
+# triples are Turtle, the rest is Python. gemov does not require this — it
+# calls rdflib either way — but a pattern is mostly triples, and this is what
+# they look like when the notation is the vocabulary's own.
+#
+# The test suite asserts that this module and `patterns.py` produce the same
+# graph, term for term.
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix vs:   <http://www.w3.org/2003/06/sw-vocab-status/ns#> .
+
+from gemov import pattern
+from patterns import _words
+
+
+@pattern
+def upper(context):
+    """`Property` and `Evaluation`, the two classes everything hangs from."""
+    @graph context.graph
+    module = context.module_iri()
+    for local, comment in (("Property", "The class of properties."),
+                           ("Evaluation", "The class of evaluations."),
+                           ("QuantityKind", "The class of quantity kinds.")):
+        +{ {context.mint(local)} a owl:Class ;
+               rdfs:label {_words(local)}@en ;
+               rdfs:comment {comment}@en ;
+               rdfs:isDefinedBy {module} ;
+               vs:term_status "testing" }
+    +{ {context.mint("quantityKind")} a owl:ObjectProperty ;
+           rdfs:label "quantity kind"@en ;
+           rdfs:comment "The kind of quantity a property quantifies."@en ;
+           rdfs:isDefinedBy {module} ;
+           vs:term_status "testing" }
+
+
+@pattern
+def quantity_kind(context, kind):
+    """One term per kind of quantity."""
+    @graph context.graph
+    module = context.module_iri()
+    +{ {context.mint(kind.key)} a owl:Class ;
+           rdfs:subClassOf {context.term("QuantityKind")} ;
+           rdfs:label {_words(kind.key)}@en ;
+           rdfs:comment {"The %s kind of quantity."
+                         % _words(kind.key).lower()}@en ;
+           rdfs:isDefinedBy {module} ;
+           vs:term_status "testing" }
+
+
+@pattern
+def property_family(context, quantity):
+    """`<Q>Property` and `<Q>Evaluation`, for one quantity."""
+    words = _words(quantity.key)
+    module = context.module_iri()
+    @graph context.graph          # the module's graph becomes the current one
+
+    cls = context.mint(quantity.key + "Property")
+    +{ {cls} a owl:Class ;
+            rdfs:subClassOf {context.term("Property")} ;
+            rdfs:label {"%s Property" % words}@en ;
+            rdfs:comment {"The class of %s properties."
+                          % words.lower()}@en ;
+            rdfs:isDefinedBy {module} ;
+            vs:term_status "testing" }
+
+    if quantity.get("kind"):
+        +{ {cls} {context.term("quantityKind")} {context.term(quantity.get("kind"))} }
+
+    ev = context.mint(quantity.key + "Evaluation")
+    +{ {ev} a owl:Class ;
+            rdfs:subClassOf {context.term("Evaluation")} ;
+            rdfs:label {"%s Evaluation" % words}@en ;
+            rdfs:comment {"The class of evaluations of %s "
+                          "properties." % words.lower()}@en ;
+            rdfs:isDefinedBy {module} ;
+            vs:term_status "testing" }
+
+
+@pattern
+def aggregation_class(context, aggregation):
+    """`<A>Evaluation`, the aggregation's own class."""
+    words = _words(aggregation.key)
+    module = context.module_iri()
+    @graph context.graph
+    term = context.mint(aggregation.key + "Evaluation")
+    +{ {term} a owl:Class ;
+            rdfs:subClassOf {context.term("Evaluation")} ;
+            rdfs:label {"%s Evaluation" % words}@en ;
+            rdfs:comment {"The class of evaluations that are "
+                          "a %s." % words.lower()}@en ;
+            rdfs:isDefinedBy {module} ;
+            vs:term_status "testing" }
+
+
+@pattern
+def aggregated_evaluation(context, aggregation, quantity):
+    """`<A><Q>Evaluation` — the cartesian product of record 302."""
+    property_family(context, quantity)
+    words = "%s %s" % (_words(aggregation.key), _words(quantity.key))
+    module = context.module_iri()
+    @graph context.graph
+    term = context.mint(aggregation.key + quantity.key + "Evaluation")
+    +{ {term} a owl:Class ;
+            rdfs:subClassOf {context.term(quantity.key + "Evaluation")} ,
+                            {context.term(aggregation.key + "Evaluation")} ;
+            rdfs:label {"%s Evaluation" % words}@en ;
+            rdfs:comment {"The %s of evaluations of %s properties."
+                          % (_words(aggregation.key).lower(),
+                                             _words(quantity.key).lower())}@en ;
+            rdfs:isDefinedBy {module} ;
+            vs:term_status "testing" }

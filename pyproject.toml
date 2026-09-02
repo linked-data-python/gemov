@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gemov"
+version = "0.1.0"
+description = "Generating Modular Ontologies and Vocabularies: patterns over dimensions, on rdflib"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Maxime Lefrançois", email = "maxime.lefrancois@emse.fr" }]
+dependencies = ["rdflib>=6.0", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+# patterns may be written in Turtle's own notation, inside Python
+ldpy = ["linked-data-python>=0.6"]
+dev = ["pytest"]
+
+[project.scripts]
+gemov = "gemov.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["gemov*"]
