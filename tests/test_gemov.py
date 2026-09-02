@@ -210,3 +210,37 @@ def test_the_command_line_builds_checks_and_profiles(tmp_path):
                "quantity=Temperature", "--explain")
     assert prof.returncode == 0 and "seas:TemperatureProperty" in prof.stdout
     assert "HumidityProperty" not in prof.stdout
+
+
+# ------------------------------------------------------------------ roles
+
+def test_a_pattern_can_take_its_dimensions_by_role():
+    """Record ottr/308: a monomial is a product of dimensions with named
+    roles, so `x·y` and `y·x` are told apart by name and not by position."""
+    seen = {}
+    context = ExecutionContext(base=NS)
+
+    @pattern
+    def variable(context, *, statisticalModifier, property):
+        seen[(statisticalModifier.key, property.key)] = True
+        context.mint(statisticalModifier.key + property.key,
+                     (RDF.type, OWL.Class))
+
+    context.dimensions = {"aggregation": {"Average": {}},
+                          "quantity": {"Temperature": {}, "Pressure": {}}}
+    context.run("M", variable, {"statisticalModifier": "aggregation",
+                                "property": "quantity"})
+    assert seen == {("Average", "Temperature"): True,
+                    ("Average", "Pressure"): True}
+    assert context.roles[variable.gemov_pattern] == {
+        "statisticalModifier": "aggregation", "property": "quantity"}
+    assert context.degree(variable.gemov_pattern) == 2
+
+
+def test_the_degree_of_a_pattern_is_its_arity():
+    context = config().generate()
+    from importlib import import_module
+    patterns = import_module("patterns")
+    assert context.degree(patterns.upper.gemov_pattern) == 0
+    assert context.degree(patterns.property_family.gemov_pattern) == 1
+    assert context.degree(patterns.aggregated_evaluation.gemov_pattern) == 2

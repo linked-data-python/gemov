@@ -62,6 +62,7 @@ class ExecutionContext:
         self.owner = {}                   # URIRef -> module name
         self.minted = {}                  # module -> [URIRef], in mint order
         self.home = {}                    # pattern function -> its module
+        self.roles = {}                   # pattern function -> {role: dimension}
         self._module = None
         self._done = set()
         self._namespace_manager = None
@@ -174,7 +175,12 @@ class ExecutionContext:
         return [Item(name, key, value)
                 for key, value in self.dimensions[name].items()]
 
-    def specialise(self, fn, *args):
+    def degree(self, fn):
+        """The arity of a pattern: the degree of the monomial it generates
+        (record ottr/308)."""
+        return len(self.roles.get(fn, {}))
+
+    def specialise(self, fn, *args, **kwargs):
         """Run a pattern once for these arguments — the guard that makes a
         pattern calling another pattern safe.
 
@@ -182,7 +188,8 @@ class ExecutionContext:
         *that* module, whoever calls it. Without this, the module a term
         belongs to would depend on which pattern happened to run first, and
         two runs of the same configuration could disagree."""
-        signature = (fn, tuple(str(a) for a in args))
+        signature = (fn, tuple(str(a) for a in args),
+                     tuple(sorted((k, str(v)) for k, v in kwargs.items())))
         if signature in self._done:
             return
         self._done.add(signature)
@@ -190,26 +197,44 @@ class ExecutionContext:
         previous, self._module = self._module, home
         self.modules.setdefault(home, self._new_graph())
         try:
-            fn(self, *args)
+            fn(self, *args, **kwargs)
         finally:
             self._module = previous
 
-    def run(self, module, pattern_fn, dimension_names, selection=None):
+    def run(self, module, pattern_fn, dimensions, selection=None):
         """Specialise one pattern over the product of its dimensions, inside
-        one module. `selection` restricts a dimension to some of its items —
-        that is what a profile is (see gemov.profile)."""
+        one module.
+
+        `dimensions` is either a list of dimension names — the arguments are
+        then positional, in that order — or a mapping *role -> dimension*, and
+        the pattern receives one keyword argument per role. Record ottr/308
+        argues for the second: a monomial is not a product of dimensions but a
+        product of dimensions **with named roles**, since `x·y` and `y·x`
+        differ, and the role is what an I-ADOPT description needs.
+
+        `selection` restricts a dimension to some of its items — that is what a
+        profile is (see gemov.profile).
+        """
         self.modules.setdefault(module, self._new_graph())
         previous, self._module = self._module, module
+        roles = list(dimensions) if isinstance(dimensions, dict) else None
+        names = [dimensions[r] for r in roles] if roles else list(dimensions)
+        self.roles[pattern_fn.gemov_pattern] = dict(dimensions) if roles \
+            else {n: n for n in names}
         try:
             pools = []
-            for name in dimension_names:
+            for name in names:
                 items = self.dimension(name)
                 keep = (selection or {}).get(name)
                 if keep is not None:
                     items = [i for i in items if i.key in keep]
                 pools.append(items)
             for combination in itertools.product(*pools):
-                self.specialise(pattern_fn.gemov_pattern, *combination)
+                if roles:
+                    self.specialise(pattern_fn.gemov_pattern,
+                                    **dict(zip(roles, combination)))
+                else:
+                    self.specialise(pattern_fn.gemov_pattern, *combination)
         finally:
             self._module = previous
 

@@ -17,6 +17,19 @@
         patterns:
           seas_patterns.property_family: [ quantity ]
 
+A pattern's dimensions are written as a list, and the pattern receives them
+as positional arguments; or as a mapping *role -> dimension*, and it receives
+one keyword argument per role:
+
+    patterns:
+      seas_patterns.aggregated_evaluation:
+        statisticalModifier: aggregation
+        property: quantity
+
+Record ottr/308 argues for the second form: a monomial is a product of
+dimensions **with named roles**, and the role is what an I-ADOPT description
+needs in order to say which term plays which part.
+
 `import` merges another configuration first, so a vocabulary of dimensions can
 be shared and a module can be added without touching it. Keys already present
 win over the imported ones, which is what lets an importer refine.
