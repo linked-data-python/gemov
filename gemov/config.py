@@ -176,10 +176,15 @@ class Config:
                             or data.get("with dimensions") or {}).items():
             self.dimensions.setdefault(name, {}).update(_as_mapping(items))
         for name, body in (data.get("modules") or {}).items():
-            module = self.modules.setdefault(name, {"title": None,
-                                                    "patterns": {}})
+            module = self.modules.setdefault(
+                name, {"title": None, "patterns": {}, "metadata": {}})
             module["title"] = body.get("title", module["title"])
             module["patterns"].update(body.get("patterns") or {})
+            # everything else a module says about itself: description, issued,
+            # licence… `patterns` and `title` are the only reserved keys
+            module.setdefault("metadata", {}).update(
+                {k: v for k, v in body.items()
+                 if k not in ("title", "patterns")})
         for pattern_name, dims in _flatten(data.get("specialize") or {}):
             module = self.modules.setdefault(self.default_module,
                                              {"title": None, "patterns": {}})
@@ -209,7 +214,8 @@ class Config:
                                                            name))
                 context.home[fn.gemov_pattern] = name
         for name, body in self.modules.items():
-            context.declare_module(name, body.get("title"))
+            context.declare_module(name, body.get("title"),
+                                   body.get("metadata"))
             for pattern_name, dimension_names in body["patterns"].items():
                 fn = _patterns.load(pattern_name)
                 context.run(name, fn, dimension_names or [], selection)

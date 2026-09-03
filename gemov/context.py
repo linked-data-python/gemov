@@ -127,10 +127,18 @@ class ExecutionContext:
     def module_iri(self, name=None):
         return self.term(name or self._module)
 
-    def declare_module(self, name, title=None):
+    def declare_module(self, name, title=None, metadata=None):
         """Mint the module's own IRI as an ontology. A module that does not
         declare itself leaves every `rdfs:isDefinedBy` pointing at nothing —
-        which is what `gemov check` reports as dangling."""
+        which is what `gemov check` reports as dangling.
+
+        `metadata` is whatever else the module says about itself, as
+        *predicate -> value* over the declared prefixes:
+        `dcterms:description`, `dcterms:issued`, `owl:versionInfo`. A
+        generated module that carries none is visibly poorer than a
+        hand-written one on its own page, and a vocabulary that is partly
+        generated should not be readable as two halves.
+        """
         self.modules.setdefault(name, self._new_graph())
         previous, self._module = self._module, name
         try:
@@ -139,9 +147,24 @@ class ExecutionContext:
             if title:
                 self.graph.add((iri, RDFS.label, Literal(title, lang="en")))
                 self.graph.add((iri, DCTERMS.title, Literal(title, lang="en")))
+            for key, values in (metadata or {}).items():
+                predicate = self.resolve(key)
+                for value in (values if isinstance(values, list) else [values]):
+                    self.graph.add((iri, predicate, self._literal(value)))
         finally:
             self._module = previous
         return iri
+
+    def _literal(self, value):
+        """An IRI if it looks like one, otherwise English prose.
+
+        A vocabulary's own metadata is either a link (a licence, a creator) or
+        something someone wrote; guessing between them on the shape of the
+        string is the only thing a YAML mapping leaves undecided."""
+        text = str(value)
+        if text.startswith(("http://", "https://", "urn:")):
+            return URIRef(text)
+        return Literal(text, lang="en")
 
     def mint(self, local, *triples):
         """Declare a term as belonging to the current module, and add the

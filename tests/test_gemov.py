@@ -363,3 +363,30 @@ def test_a_directory_with_no_yaml_is_not_a_key(tmp_path):
     tree = read_tree(str(root))
     assert "__pycache__" not in tree and "empty" not in tree
     assert "dimensions" in tree and "modules" in tree
+
+
+def test_a_module_may_carry_its_own_metadata(tmp_path):
+    """A generated module that says nothing about itself is visibly poorer
+    than a hand-written one on its own page, and a vocabulary that is partly
+    generated should not be readable as two halves."""
+    from gemov import Config
+    from rdflib import Literal, URIRef
+    from rdflib.namespace import DCTERMS
+    root = tmp_path / "vocabulary"
+    (root / "modules").mkdir(parents=True)
+    (root / "config.yaml").write_text(
+        "base: https://w3id.org/seas/\n"
+        "prefixes:\n  dcterms: http://purl.org/dc/terms/\n")
+    (root / "modules" / "ZoneOntology.yml").write_text(
+        "title: The SEAS Zone ontology\n"
+        "dcterms:description: A zone is a part of space.\n"
+        "dcterms:license: https://www.apache.org/licenses/LICENSE-2.0\n")
+    context = Config.load(str(root)).generate()
+    iri = URIRef("https://w3id.org/seas/ZoneOntology")
+    graph = context.modules["ZoneOntology"]
+    assert (iri, DCTERMS.description,
+            Literal("A zone is a part of space.", lang="en")) in graph
+    assert (iri, DCTERMS.license,
+            URIRef("https://www.apache.org/licenses/LICENSE-2.0")) in graph
+    assert (iri, DCTERMS.title,
+            Literal("The SEAS Zone ontology", lang="en")) in graph

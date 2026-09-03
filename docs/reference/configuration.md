@@ -22,6 +22,9 @@ dimensions:                           # `with dimensions:` is accepted too
 modules:
   GenericPropertyOntology:
     title: The generic property ontology
+    dcterms:description: |                # anything else the module says
+      The properties every quantity has.  # about itself, over the prefixes
+    dcterms:license: https://www.apache.org/licenses/LICENSE-2.0
     patterns:
       patterns.property_family: [ quantity ]        # positional
       patterns.aggregated_evaluation:               # by role
@@ -45,6 +48,18 @@ specialize:                           # the first prototype's flat form
 
 An unknown key at the top level is an error, with the file named: a
 configuration that silently ignores a typo is a configuration you cannot debug.
+
+## What a module says about itself
+
+`title` and `patterns` are the only reserved keys of a module. Every other key
+is a **predicate**, resolved over the declared prefixes, and its value becomes
+a statement about the module's own IRI. A value that looks like an IRI
+(`http:`, `https:`, `urn:`) is one; anything else is English prose.
+
+It matters more than it looks. A generated module that says nothing about
+itself is visibly poorer than a hand-written one on its own page — no
+description, no date — and a vocabulary that is partly generated should not be
+readable as two halves.
 
 ## As a directory
 
