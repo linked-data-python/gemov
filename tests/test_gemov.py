@@ -331,3 +331,16 @@ def test_config_yaml_must_be_a_mapping(tmp_path):
     with pytest.raises(ValueError) as exc:
         read_tree(str(root))
     assert "belong to the directory" in str(exc.value)
+
+
+def test_a_directory_with_no_yaml_is_not_a_key(tmp_path):
+    """Importing the `patterns.py` a vocabulary names leaves a `__pycache__`
+    next to it, and it is not part of the configuration."""
+    from gemov.config import read_tree
+    root = _tree(tmp_path / "vocabulary")
+    (root / "__pycache__").mkdir()
+    (root / "__pycache__" / "patterns.cpython-312.pyc").write_bytes(b"\x00")
+    (root / "empty").mkdir()
+    tree = read_tree(str(root))
+    assert "__pycache__" not in tree and "empty" not in tree
+    assert "dimensions" in tree and "modules" in tree

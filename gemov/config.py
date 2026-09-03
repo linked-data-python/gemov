@@ -79,7 +79,9 @@ def read_tree(directory):
     `config.yaml` is the one name with a meaning — its keys belong to the
     mapping that contains it. Everything else takes its key from its name,
     without the extension. Hidden files and anything that is not YAML are
-    ignored, so a `README.md` or a `patterns.py` can live in the tree.
+    ignored, so a `README.md` or a `patterns.py` can live in the tree — and
+    so can the `__pycache__` that importing it leaves behind, since a
+    directory with no YAML at any depth is not a key.
     """
     out = {}
     for entry in sorted(os.listdir(directory)):
@@ -87,7 +89,12 @@ def read_tree(directory):
             continue
         path = os.path.join(directory, entry)
         if os.path.isdir(path):
-            out[entry] = read_tree(path)
+            nested = read_tree(path)
+            # A directory holding no YAML at any depth is not part of the
+            # configuration: `__pycache__` appears next to the `patterns.py`
+            # the vocabulary names, and it is not a key.
+            if nested:
+                out[entry] = nested
         elif entry in INLINE:
             with open(path, encoding="utf-8") as f:
                 inline = yaml.safe_load(f) or {}
