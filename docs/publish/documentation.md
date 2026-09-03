@@ -48,6 +48,15 @@ in SEAS the examples *are* the documentation.
 The dependency is optional. Without `markdown` installed the prose is escaped
 and shown as written.
 
+A link the prose writes **into the vocabulary's own namespace** becomes a link
+into the site. SEAS writes `https://w3id.org/seas/SSNAlignment` and
+`https://w3id.org/seas/featureofinterest.png`, and it is right to — an IRI is
+not a path. But a page *of that namespace* that keeps them absolute sends its
+own reader back out to whatever answers there, which is how a preview, a
+static export or a deployment on another host ends up with broken figures. A
+tail with a file extension is a file and is linked as it is; anything else is
+a term and takes the site's suffix. Links out of the namespace are untouched.
+
 ### The order of the terms — `--order`
 
 Two policies, and which one is right is a question about the vocabulary, not

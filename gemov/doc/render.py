@@ -21,6 +21,7 @@ dimensions, at which degree.
 
 import html
 import os
+import re
 
 from rdflib import URIRef
 
@@ -104,7 +105,34 @@ def _markdown():
 _MD = _markdown()
 
 
-def prose(texts):
+def _localise(html_text, namespace, suffix):
+    """Links into the vocabulary's own namespace become links into this site.
+
+    SEAS descriptions write absolute IRIs — `https://w3id.org/seas/SSNAlignment`
+    for a module, `https://w3id.org/seas/featureofinterest.png` for a figure —
+    and they are right to: an IRI is not a path. But a page *of that
+    namespace* that keeps them absolute sends its own reader back out to
+    whatever answers there, which is how a preview, a static export or a
+    deployment on another host ends up with broken figures.
+
+    A tail that has a file extension is a file and is linked as it is;
+    anything else is a term, and takes the site's suffix."""
+    if not namespace:
+        return html_text
+
+    def relative(match):
+        attribute, tail = match.group(1), match.group(2)
+        if not tail or tail.startswith(("#", "?")):
+            return match.group(0)
+        if not os.path.splitext(tail)[1]:
+            tail += suffix
+        return '%s="%s"' % (attribute, tail)
+
+    return re.sub(r'\b(src|href)="%s([^"]*)"' % re.escape(namespace),
+                  relative, html_text)
+
+
+def prose(texts, namespace=None, suffix=""):
     """One or more Markdown paragraphs, as HTML.
 
     The content comes from the vocabulary's own source files, which are as
@@ -122,7 +150,8 @@ def prose(texts):
             out.append('<p class="d">%s</p>' % esc(text))
         else:
             _MD.reset()
-            out.append('<div class="d">%s</div>' % _MD.convert(text))
+            out.append('<div class="d">%s</div>'
+                       % _localise(_MD.convert(text), namespace, suffix))
     return "".join(out)
 
 
@@ -197,7 +226,7 @@ def render_term(graph, iri, namespace, prefix="", home_label=None,
     title = data["labels"][0] if data["labels"] else local(iri, namespace)
     body = []
     if data["comments"]:
-        body.append(prose(data["comments"]))
+        body.append(prose(data["comments"], namespace, suffix))
     body.append(_dl([
         ("IRI", "<code>%s</code>" % esc(iri)),
         ("Type", ", ".join('<span class="pill">%s</span>'
@@ -279,7 +308,7 @@ def _term_block(graph, iri, namespace, prefix, suffix):
     return ('<section class="term" id="%s"><h3><a href="%s%s">%s</a> %s</h3>'
             '<div class="tiri"><code>%s</code></div>%s%s</section>'
             % (esc(name), esc(name), suffix, esc(label), kinds, esc(iri),
-               prose(data["comments"]),
+               prose(data["comments"], namespace, suffix),
                '<p class="rel">%s</p>' % " · ".join(rows) if rows else ""))
 
 
@@ -319,7 +348,7 @@ def render_module(module_version, namespace, prefix="", versions=(),
     title = header["titles"][0] if header["titles"] else module_version.module
     body = []
     if header["descriptions"]:
-        body.append(prose(header["descriptions"]))
+        body.append(prose(header["descriptions"], namespace, suffix))
     body.append(_dl([
         ("IRI", "<code>%s</code>" % esc(module_version.iri)),
         ("Version", esc(module_version.version)),

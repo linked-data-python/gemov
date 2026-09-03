@@ -327,10 +327,25 @@ def test_markdown_in_a_description_is_rendered(client):
     images and fenced Turtle examples. Escaping them shows the reader
     `[SSN](http://…)` where the 2016 site showed a link."""
     body = client.get("/FeatureOfInterestOntology").get_data(as_text=True)
-    assert '<a href="https://w3id.org/seas/SSNAlignment">' in body
     assert "<pre><code>" in body                       # the Turtle examples
     assert '<img alt="Overview of the System ontology"' in body
     assert "[SSNAlignment](" not in body               # not left as source
+
+
+def test_a_link_into_the_namespace_stays_inside_the_site(client):
+    """The descriptions write absolute IRIs, and are right to. A page of that
+    namespace that keeps them absolute sends its own reader back out to
+    whatever answers there — which is how a figure ends up broken in a
+    preview, a static export, or a deployment on another host."""
+    body = client.get("/FeatureOfInterestOntology").get_data(as_text=True)
+    assert '<a href="SSNAlignment">' in body           # a module: no extension
+    assert 'src="featureofinterest.png"' in body       # a file: as it is
+    assert "https://w3id.org/seas/SSNAlignment\"" not in body
+
+
+def test_a_link_out_of_the_namespace_is_untouched(client):
+    body = client.get("/FeatureOfInterestOntology").get_data(as_text=True)
+    assert '<a href="http://qudt.org/">' in body
 
 
 def test_a_module_documents_its_terms_in_place(client):
