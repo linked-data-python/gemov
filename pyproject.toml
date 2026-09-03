@@ -27,3 +27,10 @@ gemov = "gemov.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["gemov*"]
+
+# The documentation queries are written in Linked-Data Python and loaded by
+# `gemov/doc/queries.py` through ldpy's import hook: they are data as far as
+# packaging is concerned, and a wheel without them boots and then fails on the
+# first page it renders.
+[tool.setuptools.package-data]
+gemov = ["**/*.ldpy"]

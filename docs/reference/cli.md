@@ -4,9 +4,10 @@
 gemov build   CONFIG [-o OUT] [--format turtle]
 gemov profile CONFIG dimension=Item[,Item] … [-o OUT] [--explain]
 gemov check   CONFIG
-gemov docs    CONFIG [-o site] [--prefix P]          # needs [docs]
+gemov docs    CONFIG [-o site] [--prefix P] [--brand B]        # needs [docs]
 gemov serve   CONFIG [--host H] [--port N] [--prefix P]        # needs [server]
 gemov serve   --files DIR… --namespace IRI [--prefix P]        # needs [server]
+              [--mount /path] [--brand B] [--assets DIR]
 ```
 
 Every entry point is also `python -m gemov.cli …`.
@@ -41,3 +42,12 @@ in the pages (`seas:Temperature`).
 Serves the namespace over HTTP — see [the server](../publish/server.md). Give
 a configuration for a generated vocabulary, or `--files` with `--namespace` for
 a directory of `Module-x.y.ttl`.
+
+`--prefix` and `--mount` are unrelated and easy to confuse: the first is the
+prefix of a compact IRI shown in a page (`seas:Temperature`), the second is
+the path the site is served under (`/seas/EndNode`).
+
+`--brand` names a YAML file — a logo, a name, the project the logo links to,
+a footer note and two colours — and `--assets` a directory published under
+`<mount>/static/`, which is where the logo is found. `gemov docs` takes the
+same `--brand` for the static site.

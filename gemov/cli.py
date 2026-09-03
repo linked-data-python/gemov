@@ -16,6 +16,14 @@ from . import check as _check
 from . import profile as _profile
 
 
+def _brand(path):
+    """The brand, if one was named."""
+    if not path:
+        return None
+    from .doc.brand import Brand
+    return Brand.load(path)
+
+
 def _selection(pairs):
     selection = {}
     for pair in pairs:
@@ -51,12 +59,22 @@ def main(argv=None):
     docs.add_argument("config")
     docs.add_argument("-o", "--out", default="site")
     docs.add_argument("--prefix", default="")
+    docs.add_argument("--brand", help="a YAML file: logo, name, project link, "
+                      "footer note (see gemov.doc.brand)")
 
     serve = sub.add_parser("serve", help="serve the vocabulary over HTTP")
     serve.add_argument("config", nargs="?")
     serve.add_argument("--files", nargs="+")
     serve.add_argument("--namespace")
-    serve.add_argument("--prefix", default="")
+    serve.add_argument("--prefix", default="",
+                       help="prefix for compact IRIs, e.g. seas")
+    serve.add_argument("--mount", default="",
+                       help="the path the site is served under, e.g. /seas "
+                            "(default: the root)")
+    serve.add_argument("--brand", help="a YAML file: logo, name, project "
+                       "link, footer note (see gemov.doc.brand)")
+    serve.add_argument("--assets", help="a directory served under "
+                       "<mount>/static/ — where the logo lives")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=5000)
 
@@ -67,16 +85,23 @@ def main(argv=None):
             from .server import from_config, from_files
         except ImportError:
             raise SystemExit("the server is optional: pip install 'gemov[server]'")
+        brand = _brand(args.brand)
+        common = dict(mount=args.mount, brand=brand, assets=args.assets)
         if args.config:
-            application = from_config(Config.load(args.config), args.prefix)
+            application = from_config(Config.load(args.config), args.prefix,
+                                      **common)
         elif args.files:
             if not args.namespace:
                 raise SystemExit("--files needs --namespace")
-            application = from_files(args.files, args.namespace, args.prefix)
+            application = from_files(args.files, args.namespace, args.prefix,
+                                     **common)
         else:
             raise SystemExit("give a configuration, or --files with --namespace")
         source = application.config["SOURCE"]
-        print("%d modules in %s" % (len(source.modules()), source.namespace))
+        print("%d modules in %s under %s"
+              % (len(source.modules()), source.namespace,
+                 "/" + args.mount.strip("/") + "/" if args.mount.strip("/")
+                 else "/"))
         application.run(host=args.host, port=args.port)
         return 0
 
@@ -89,7 +114,8 @@ def main(argv=None):
         except ImportError as exc:
             raise SystemExit("the documentation needs Linked-Data Python: "
                              "pip install 'gemov[docs]' (%s)" % exc)
-        written = write_site(Generated(config), args.out, args.prefix, config)
+        written = write_site(Generated(config), args.out, args.prefix, config,
+                             brand=_brand(args.brand))
         print("%d pages in %s" % (len(written), args.out))
         return 0
 

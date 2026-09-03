@@ -15,11 +15,12 @@ hand-written ontology cannot:
   *rule*, next to documentation of its results.
 """
 
+from .brand import Brand
 from .cache import Cache
 from .render import (render_index, render_module, render_pattern,
                      render_patterns_index, render_term, write_site)
 from .queries import describe, module_contents, ontology_header
 
-__all__ = ["Cache", "describe", "module_contents", "ontology_header",
+__all__ = ["Brand", "Cache", "describe", "module_contents", "ontology_header",
            "render_index", "render_module", "render_pattern",
            "render_patterns_index", "render_term", "write_site"]

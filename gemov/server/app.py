@@ -11,10 +11,10 @@ it is a test in `tests/test_server.py`. It is not restated here: two copies of
 a contract are one contract and one lie.
 """
 
-import argparse
+import os
 
 from flask import Blueprint, Flask, Response, abort, current_app, redirect, \
-    request
+    request, send_from_directory, url_for
 
 from . import views
 from .source import Files, Generated
@@ -50,6 +50,19 @@ def _prefix():
 
 def _cache():
     return current_app.config["CACHE"]
+
+
+def _brand():
+    return current_app.config["BRAND"]
+
+
+def _home():
+    """The URL of the index, whatever the site is mounted under.
+
+    `url_for` folds in both the blueprint's `url_prefix` and the WSGI
+    `SCRIPT_NAME`, so a site mounted at `/seas/` — directly or behind a
+    reverse proxy — links to itself and not to the server's root."""
+    return url_for("gemov.index")
 
 
 # --------------------------------------------------------------- negotiation
@@ -96,8 +109,14 @@ def _facts():
 
 def _linked(page_body):
     """The pages are written for a static site (`x.html`); served live, the
-    paths have no extension."""
-    return page_body.replace('.html"', '"').replace('href="index"', 'href="/"')
+    paths have no extension.
+
+    Every other link stays **relative**, which is what lets the same page be
+    correct at `/EndNode` and at `/seas/EndNode`: a relative `href="Foo"`
+    resolves against the directory of the current URL either way.  Only the
+    link to the index cannot be relative, and it is the one resolved here."""
+    return page_body.replace('.html"', '"').replace(
+        'href="index"', 'href="%s"' % _home())
 
 
 # ------------------------------------------------------------------- routes
@@ -111,7 +130,8 @@ def index():
         return rdf_response(graph, media)
     body, etag = _cache().get_or_build(
         ("index",), _stamp(),
-        lambda: _linked(render_index(source, _prefix(), _facts())))
+        lambda: _linked(render_index(source, _prefix(), _facts(),
+                                     brand=_brand())))
     if not_modified(etag):
         return Response(status=304)
     return html_response(body, etag=etag)
@@ -122,7 +142,8 @@ def patterns():
     facts = _facts()
     if not facts:
         abort(404, "this vocabulary is not generated from patterns")
-    return html_response(_linked(render_patterns_index(facts)))
+    return html_response(_linked(render_patterns_index(facts,
+                                                      brand=_brand())))
 
 
 @bp.route("/pattern-<name>")
@@ -130,7 +151,7 @@ def pattern(name):
     for fact in _facts():
         if fact["name"] == name:
             return html_response(_linked(render_pattern(
-                fact, _source().namespace, _prefix())))
+                fact, _source().namespace, _prefix(), brand=_brand())))
     abort(404)
 
 
@@ -175,18 +196,33 @@ def view():
                     % esc(", ".join(report["unknown"])))
     if report["closure"]:
         rows.append("<h2>Pulled in to close the view</h2><ul>%s</ul>"
-                    % "".join('<li><a href="/%s">%s</a></li>'
-                              % (esc(local(t, ns)), esc(short(t, ns, prefix)))
+                    % "".join('<li><a href="%s%s">%s</a></li>'
+                              % (esc(_home()), esc(local(t, ns)),
+                                 esc(short(t, ns, prefix)))
                               for t in sorted(report["closure"])))
     rows.append("<h2>The graph</h2><pre>%s</pre>"
                 % esc(graph.serialize(format="turtle")))
     return html_response(page("View", "assembled on demand", "".join(rows),
-                              home="/"))
+                              home=_home(), brand=_brand()))
 
 
 @bp.route("/cache")
 def cache_stats():
     return dict(_cache().stats())
+
+
+@bp.route("/static/<path:filename>")
+def asset(filename):
+    """A logo, and whatever else a brand needs.
+
+    Served by the blueprint rather than by Flask's own static folder so that
+    it lands under the mount point with everything else: at `/seas/`, the
+    pages ask for the relative `static/logo.png` and get
+    `/seas/static/logo.png`."""
+    directory = current_app.config["ASSETS"]
+    if not directory:
+        abort(404)
+    return send_from_directory(directory, filename)
 
 
 @bp.route("/<path:name>")
@@ -201,7 +237,9 @@ def resource(name):
             resolved = source.resolve_version(module, version)
             if resolved is None:
                 abort(404)
-            return redirect("/%s-%s" % (module, resolved.version), code=302)
+            return redirect(url_for("gemov.resource",
+                                    name="%s-%s" % (module, resolved.version)),
+                            code=302)
         return _serve_module(exact, media, canonical=True)
 
     if source.is_module(bare):
@@ -218,8 +256,9 @@ def _stamp():
 
 def _serve_module(module_version, media, canonical):
     source = _source()
-    location = None if canonical else "/%s-%s" % (module_version.module,
-                                                  module_version.version)
+    location = None if canonical else url_for(
+        "gemov.resource", name="%s-%s" % (module_version.module,
+                                          module_version.version))
     if media in RDF_TYPES:
         return rdf_response(module_version.graph, media, location=location)
     facts = [f for f in _facts() if f["module"] == module_version.module]
@@ -228,7 +267,8 @@ def _serve_module(module_version, media, canonical):
         module_version.stamp(),
         lambda: _linked(render_module(
             module_version, source.namespace, _prefix(),
-            source.module_versions(module_version.module), facts)))
+            source.module_versions(module_version.module), facts,
+            brand=_brand())))
     if not_modified(etag):
         return Response(status=304)
     return html_response(body, etag=etag, location=location)
@@ -240,12 +280,13 @@ def _serve_term(iri, media):
     if definition is None:
         abort(404)
     if media in RDF_TYPES:
-        return rdf_response(definition, media,
-                            location="/%s-%s" % (home.module, home.version))
+        return rdf_response(definition, media, location=url_for(
+            "gemov.resource",
+            name="%s-%s" % (home.module, home.version)))
     body, etag = _cache().get_or_build(
         ("term", iri), home.stamp(),
         lambda: _linked(render_term(home.graph, iri, source.namespace,
-                                    _prefix(), str(home))))
+                                    _prefix(), str(home), brand=_brand())))
     if not_modified(etag):
         return Response(status=304)
     return html_response(body, etag=etag)
@@ -253,44 +294,34 @@ def _serve_term(iri, media):
 
 # -------------------------------------------------------------------- setup
 
-def build_app(source, prefix="", config=None):
-    """A Flask application serving one source."""
+def build_app(source, prefix="", config=None, mount="", brand=None,
+              assets=None):
+    """A Flask application serving one source.
+
+    ``mount`` is the path the vocabulary is served under — ``/seas`` puts the
+    index at ``/seas/`` and a term at ``/seas/EndNode``.  It is a deployment
+    decision, not a property of the vocabulary: the same files served at the
+    root and under a context path must produce the same pages, which is why
+    every link a page carries is relative and the few that cannot be go
+    through ``url_for``.
+    """
     application = Flask(__name__)
     application.config.update(SOURCE=source, PREFIX=prefix, CONFIG=config,
-                              CACHE=Cache())
-    application.register_blueprint(bp)
+                              CACHE=Cache(), BRAND=brand,
+                              ASSETS=os.path.abspath(assets)
+                              if assets else None)
+    application.register_blueprint(
+        bp, url_prefix=("/" + mount.strip("/")) if mount.strip("/") else None)
     return application
 
 
-def from_files(directories, namespace, prefix=""):
-    return build_app(Files(directories, namespace), prefix)
+def from_files(directories, namespace, prefix="", mount="", brand=None,
+               assets=None):
+    return build_app(Files(directories, namespace), prefix, mount=mount,
+                     brand=brand, assets=assets)
 
 
-def from_config(config, prefix="", version="1.0"):
-    return build_app(Generated(config, version), prefix, config)
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--files", nargs="+", help="directories of "
-                        "Module-x.y.ttl files")
-    parser.add_argument("--namespace", help="required with --files")
-    parser.add_argument("--config", help="a gemov configuration")
-    parser.add_argument("--prefix", default="", help="prefix for compact IRIs")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
-    args = parser.parse_args(argv)
-
-    if args.config:
-        from ..config import Config
-        from_config(Config.load(args.config), args.prefix)
-    elif args.files:
-        if not args.namespace:
-            parser.error("--files needs --namespace")
-        from_files(args.files, args.namespace, args.prefix)
-    else:
-        parser.error("give --files or --config")
-    source = _source()
-    print("%d modules in %s" % (len(source.modules()), source.namespace))
-    app.run(host=args.host, port=args.port)
-    return 0
+def from_config(config, prefix="", version="1.0", mount="", brand=None,
+                assets=None):
+    return build_app(Generated(config, version), prefix, config, mount=mount,
+                     brand=brand, assets=assets)

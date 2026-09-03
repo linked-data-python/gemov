@@ -224,3 +224,82 @@ def test_touching_the_source_invalidates_the_page(client, tmp_path):
         assert cache_of(client).stats()["hits"] == hits      # rebuilt, not served
     finally:
         os.utime(path, (stat.st_atime, stat.st_mtime))
+
+
+# ---------------------------------------------------- mounted under a path
+
+BRAND = None
+
+
+@pytest.fixture(scope="module")
+def mounted(tmp_path_factory):
+    """The same vocabulary, served under `/seas/` with an identity.
+
+    A context path is a deployment decision, not a property of the
+    vocabulary: the same files must produce the same pages at the root and
+    under `/seas/`.
+    """
+    from gemov.doc import Brand
+    assets = tmp_path_factory.mktemp("assets")
+    (assets / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n not really a png")
+    brand = Brand(name="SEAS", logo="static/logo.png",
+                  home="http://the-smart-energy.com",
+                  note="ITEA 2 12004 SEAS", ink="#3479aa")
+    application = from_files([SOURCES], SEAS_NS, "seas", mount="/seas",
+                             brand=brand, assets=str(assets))
+    application.config["TESTING"] = True
+    return application.test_client()
+
+
+def test_nothing_is_served_outside_the_mount(mounted):
+    assert mounted.get("/").status_code == 404
+    assert mounted.get("/BuildingOntology").status_code == 404
+
+
+def test_every_kind_of_page_is_served_under_the_mount(mounted):
+    for path in ("/seas/", "/seas/BuildingOntology",
+                 "/seas/BuildingOntology-1.0", "/seas/static/logo.png"):
+        assert mounted.get(path).status_code == 200, path
+
+
+def test_a_version_redirect_stays_inside_the_mount(mounted):
+    """The one place the server builds an absolute path of its own."""
+    response = mounted.get("/seas/DeviceOntology-1")
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/seas/DeviceOntology-1.1"
+
+
+def test_the_link_to_the_index_is_the_mounted_one(mounted):
+    """Every other link on a page is relative, and therefore already right;
+    the index is the only one that cannot be."""
+    body = mounted.get("/seas/BuildingOntology").get_data(as_text=True)
+    assert '<h1><a href="/seas/"' in body
+    assert 'href="/BuildingOntology"' not in body
+
+
+def test_the_content_location_of_a_floating_version_is_mounted(mounted):
+    """`…/BuildingOntology` answers with the latest version and says which."""
+    response = mounted.get("/seas/BuildingOntology")
+    assert response.headers["Content-Location"] == "/seas/BuildingOntology-1.0"
+
+
+def test_the_pages_wear_the_brand(mounted):
+    body = mounted.get("/seas/BuildingOntology").get_data(as_text=True)
+    assert 'src="static/logo.png"' in body          # relative: mount-proof
+    assert 'href="http://the-smart-energy.com"' in body
+    assert "ITEA 2 12004 SEAS" in body
+    assert "--brand:#3479aa" in body
+    assert "<title>The SEAS Building Ontology · SEAS</title>" in body
+
+
+def test_an_unbranded_site_is_unchanged(client):
+    """The brand is optional, and its absence must not leave holes."""
+    body = client.get("/BuildingOntology").get_data(as_text=True)
+    header = body[body.index("<header>"):body.index("</header>")]
+    assert "<img" not in header and 'class="mark"' not in header
+    assert ":root{--brand" not in body           # no colour override
+    assert "<title>The SEAS Building Ontology</title>" in body
+
+
+def test_assets_are_refused_when_no_directory_was_given(client):
+    assert client.get("/static/logo.png").status_code == 404
