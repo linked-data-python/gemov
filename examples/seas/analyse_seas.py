@@ -1,6 +1,6 @@
 """What the published SEAS 1.0 is made of — the case for generating it.
 
-    python examples/seas/analyse_seas.py ../seas/src/main/ontop/1.0
+    python examples/seas/analyse_seas.py ../seas/ontologies/1.0
 
 Every number record ottr/302 relies on comes from here, so none of them has to
 be trusted. Three questions:

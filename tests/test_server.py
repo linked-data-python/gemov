@@ -20,8 +20,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SEAS_NS = "https://w3id.org/seas/"
 #: the published SEAS 1.0, next to this repository — a source that is files
-SOURCES = os.path.normpath(os.path.join(ROOT, "..", "seas", "src", "main",
-                                        "ontop", "1.0"))
+SOURCES = os.path.normpath(os.path.join(ROOT, "..", "seas",
+                                        "ontologies", "1.0"))
 EXAMPLE = os.path.join(ROOT, "examples", "seas", "vocabulary.yml")
 
 pytestmark = pytest.mark.skipif(not os.path.isdir(SOURCES),
@@ -409,3 +409,25 @@ def test_a_module_still_wins_over_a_file_of_the_same_name(with_assets):
 def test_an_asset_cannot_escape_its_directory(with_assets):
     assert with_assets.get("/../../etc/passwd").status_code in (400, 404)
     assert with_assets.get("/nowhere.png").status_code == 404
+
+
+def test_a_language_tag_does_not_stop_the_rendering(client):
+    """`seas:hasProperty`'s comment is Markdown and carries `@en`. A language
+    tag says which language the prose is in, never which syntax."""
+    body = client.get("/hasProperty").get_data(as_text=True)
+    assert "<pre><code>" in body                       # its Turtle example
+    assert "<p>Links a seas:FeatureOfInterest" in body
+
+
+def test_the_datatype_is_what_says_the_form(tmp_path):
+    """RDF says one thing about the form of a literal, and it is the
+    datatype: `rdf:HTML` goes in as markup, everything else is Markdown."""
+    from gemov.doc.render import prose
+    from rdflib import Literal, URIRef
+    html_literal = Literal("<b>already</b> markup",
+                           datatype=URIRef("http://www.w3.org/1999/02/22-rdf"
+                                           "-syntax-ns#HTML"))
+    assert "<b>already</b> markup" in prose(html_literal)
+    assert "&lt;b&gt;" not in prose(html_literal)
+    assert "<em>markdown</em>" in prose(Literal("*markdown*", lang="en"))
+    assert "<em>markdown</em>" in prose(Literal("*markdown*"))

@@ -1,6 +1,6 @@
 """Serving a vocabulary: one namespace, modular and versioned.
 
-    gemov serve --files src/main/ontop/1.0 --namespace https://w3id.org/seas/
+    gemov serve --files ontologies/1.0 --namespace https://w3id.org/seas/
     gemov serve --config vocabulary.yml
 
 The source is either a directory of `Module-x.y.ttl` files or a gemov

@@ -20,7 +20,10 @@ def describe(graph, iri):
     @graph graph
 
     labels = [str(o) for o in m{ {term} rdfs:label ?l }]
-    comments = [str(o) for o in m{ {term} rdfs:comment ?c }]
+    # The comments keep their RDF term: `str()` still gives the text, and the
+    # DATATYPE is what says how to read it — `rdf:HTML` is HTML, anything else
+    # is prose. A language tag says nothing about the form.
+    comments = list(m{ {term} rdfs:comment ?c })
     preferred = [str(o) for o in m{ {term} skos:prefLabel ?p }]
     status = [str(o) for o in m{ {term} vs:term_status ?s }]
     defined_by = [str(o) for o in m{ {term} rdfs:isDefinedBy ?d }]
@@ -78,7 +81,7 @@ def ontology_header(graph, module_iri):
     return {
         "iri": str(module),
         "titles": [str(o) for o in m{ {module} <http://purl.org/dc/terms/title> ?t }],
-        "descriptions": [str(o) for o in m{ {module} <http://purl.org/dc/terms/description> ?d }],
+        "descriptions": list(m{ {module} <http://purl.org/dc/terms/description> ?d }),
         "issued": [str(o) for o in m{ {module} <http://purl.org/dc/terms/issued> ?i }],
         "imports": [str(o) for o in m{ {module} owl:imports ?i }],
     }

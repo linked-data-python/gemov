@@ -45,6 +45,13 @@ lists and fenced Turtle examples. It is rendered. Showing the reader
 `[SSN](http://…)` where the 2016 site showed a link is not a cosmetic loss:
 in SEAS the examples *are* the documentation.
 
+RDF says one thing about the **form** of a literal, and it is the datatype:
+`rdf:HTML` is markup and goes in as it is, everything else is prose and is
+rendered as Markdown. A language tag says which *language* the prose is in,
+never which syntax — `"…"@en` is rendered like any other literal. Guessing the
+syntax from the text was considered and rejected: it would make the rendering
+of a comment depend on whether it happens to contain a backtick.
+
 The dependency is optional. Without `markdown` installed the prose is escaped
 and shown as written.
 

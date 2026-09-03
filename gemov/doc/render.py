@@ -132,26 +132,51 @@ def _localise(html_text, namespace, suffix):
                   relative, html_text)
 
 
+#: `rdf:HTML` — the one datatype that says "this is already markup".
+RDF_HTML = "http://www.w3.org/1999/02/22-rdf-syntax-ns#HTML"
+
+
+def _form(text):
+    """Is this literal markup, or prose to be rendered?
+
+    RDF says one thing about the form of a literal, and it is the
+    **datatype**: `rdf:HTML` is a fragment of HTML and goes in as it is.
+    Everything else — a plain literal, with or without a language tag — is
+    prose, and prose in a published vocabulary is Markdown by convention
+    (SEAS's own `ontologies/README.md` has said so since 2016). A language
+    tag says which language the prose is in, never which syntax; guessing
+    the syntax from the text would make the rendering of a comment depend on
+    whether it happens to contain a backtick.
+    """
+    datatype = getattr(text, "datatype", None)
+    return "html" if datatype is not None and str(datatype) == RDF_HTML \
+        else "markdown"
+
+
 def prose(texts, namespace=None, suffix=""):
-    """One or more Markdown paragraphs, as HTML.
+    """One or more literals of prose, as HTML.
 
     The content comes from the vocabulary's own source files, which are as
     trusted as the code that renders them; nothing is sanitised beyond what
     Markdown does, and a vocabulary you would not run is a vocabulary you
     would not serve either."""
-    if isinstance(texts, str):
+    if isinstance(texts, str) or not isinstance(texts, (list, tuple)):
         texts = [texts]
     out = []
     for text in texts:
-        text = (text or "").strip()
-        if not text:
+        form = _form(text)
+        body = str(text or "").strip()
+        if not body:
             continue
-        if _MD is None:
-            out.append('<p class="d">%s</p>' % esc(text))
+        if form == "html":
+            out.append('<div class="d">%s</div>'
+                       % _localise(body, namespace, suffix))
+        elif _MD is None:
+            out.append('<p class="d">%s</p>' % esc(body))
         else:
             _MD.reset()
             out.append('<div class="d">%s</div>'
-                       % _localise(_MD.convert(text), namespace, suffix))
+                       % _localise(_MD.convert(body), namespace, suffix))
     return "".join(out)
 
 
