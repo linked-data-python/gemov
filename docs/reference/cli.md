@@ -4,10 +4,10 @@
 gemov build   CONFIG [-o OUT] [--format turtle]
 gemov profile CONFIG dimension=Item[,Item] … [-o OUT] [--explain]
 gemov check   CONFIG
-gemov docs    CONFIG [-o site] [--prefix P] [--brand B]        # needs [docs]
+gemov docs    CONFIG [-o site] [--prefix P] [--brand B] [--order O]  # [docs]
 gemov serve   CONFIG [--host H] [--port N] [--prefix P]        # needs [server]
 gemov serve   --files DIR… --namespace IRI [--prefix P]        # needs [server]
-              [--mount /path] [--brand B] [--assets DIR]
+              [--mount /path] [--brand B] [--assets DIR] [--order O]
 ```
 
 Every entry point is also `python -m gemov.cli …`.
@@ -51,3 +51,6 @@ the path the site is served under (`/seas/EndNode`).
 a footer note and two colours — and `--assets` a directory published under
 `<mount>/static/`, which is where the logo is found. `gemov docs` takes the
 same `--brand` for the static site.
+
+`--order` is `kind` (default) or `source` — how a module lays out the terms it
+defines; see [generated documentation](../publish/documentation.md).

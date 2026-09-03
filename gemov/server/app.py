@@ -56,6 +56,10 @@ def _brand():
     return current_app.config["BRAND"]
 
 
+def _order():
+    return current_app.config["ORDER"]
+
+
 def _home():
     """The URL of the index, whatever the site is mounted under.
 
@@ -245,7 +249,27 @@ def resource(name):
     if source.is_module(bare):
         return _serve_module(source.latest(bare), media, canonical=False)
 
+    # A file under the namespace, from the assets directory. SEAS descriptions
+    # point at `https://w3id.org/seas/featureofinterest.png`, and that URL is
+    # this server's to answer: the 2016 site served those figures at exactly
+    # those IRIs, and a documentation whose figures 404 is a documentation
+    # with holes in it. Checked after the modules so a module always wins.
+    served = _serve_asset(name)
+    if served is not None:
+        return served
+
     return _serve_term(source.namespace + bare, media)
+
+
+def _serve_asset(name):
+    """The asset of that name, if the deployment has one."""
+    directory = current_app.config["ASSETS"]
+    if not directory or not os.path.splitext(name)[1]:
+        return None
+    path = os.path.normpath(os.path.join(directory, name))
+    if not path.startswith(directory + os.sep) or not os.path.isfile(path):
+        return None
+    return send_from_directory(directory, name)
 
 
 def _stamp():
@@ -263,12 +287,14 @@ def _serve_module(module_version, media, canonical):
         return rdf_response(module_version.graph, media, location=location)
     facts = [f for f in _facts() if f["module"] == module_version.module]
     body, etag = _cache().get_or_build(
-        ("module", module_version.module, module_version.version),
+        # the order is part of the key: the same module laid out two ways is
+        # two pages, and a cache that forgot it would serve the wrong one
+        ("module", module_version.module, module_version.version, _order()),
         module_version.stamp(),
         lambda: _linked(render_module(
             module_version, source.namespace, _prefix(),
             source.module_versions(module_version.module), facts,
-            brand=_brand())))
+            brand=_brand(), order=_order())))
     if not_modified(etag):
         return Response(status=304)
     return html_response(body, etag=etag, location=location)
@@ -295,7 +321,7 @@ def _serve_term(iri, media):
 # -------------------------------------------------------------------- setup
 
 def build_app(source, prefix="", config=None, mount="", brand=None,
-              assets=None):
+              assets=None, order="kind"):
     """A Flask application serving one source.
 
     ``mount`` is the path the vocabulary is served under — ``/seas`` puts the
@@ -305,9 +331,12 @@ def build_app(source, prefix="", config=None, mount="", brand=None,
     every link a page carries is relative and the few that cannot be go
     through ``url_for``.
     """
-    application = Flask(__name__)
+    # `static_folder=None`: the assets are the deployment's, served by the
+    # blueprint so they land under the mount point. Flask's own `/static/`
+    # route would otherwise shadow it whenever the mount is the root.
+    application = Flask(__name__, static_folder=None)
     application.config.update(SOURCE=source, PREFIX=prefix, CONFIG=config,
-                              CACHE=Cache(), BRAND=brand,
+                              CACHE=Cache(), BRAND=brand, ORDER=order,
                               ASSETS=os.path.abspath(assets)
                               if assets else None)
     application.register_blueprint(
@@ -316,12 +345,12 @@ def build_app(source, prefix="", config=None, mount="", brand=None,
 
 
 def from_files(directories, namespace, prefix="", mount="", brand=None,
-               assets=None):
+               assets=None, order="kind"):
     return build_app(Files(directories, namespace), prefix, mount=mount,
-                     brand=brand, assets=assets)
+                     brand=brand, assets=assets, order=order)
 
 
 def from_config(config, prefix="", version="1.0", mount="", brand=None,
-                assets=None):
+                assets=None, order="kind"):
     return build_app(Generated(config, version), prefix, config, mount=mount,
-                     brand=brand, assets=assets)
+                     brand=brand, assets=assets, order=order)

@@ -19,6 +19,7 @@ files, and **the contract below is the same either way**.
 | `…/BuildingOntology-0.9` | that version of the module | **200** |
 | `…/BuildingOntology-0` | the highest version with that major | **302** to the full version |
 | `…/EndNode` | a term | **200** — its definition, from the module version that claims it |
+| `…/figure.png` | nothing in RDF | **200** — from `--assets`, if there is such a file |
 
 Two rules cut across all of them.
 
@@ -105,6 +106,13 @@ gemov docs  … --brand brand.yml
 `--assets` is a directory published under `<mount>/static/`, which is where
 `logo.png` above is found. Both flags are optional and independent: without a
 brand the pages are exactly as they were.
+
+An asset is also served **directly under the namespace**, when nothing else
+claims that name: SEAS descriptions point at
+`https://w3id.org/seas/featureofinterest.png`, and that IRI is this server's to
+answer — the 2016 site served those figures at exactly those IRIs, and a
+documentation whose figures 404 is a documentation with holes in it. A module
+always wins over a file of the same name.
 
 Only those two colours are accepted, and on purpose. A header painted in a
 palette that fights the logo looks worse than no logo at all; everything else

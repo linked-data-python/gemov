@@ -303,3 +303,94 @@ def test_an_unbranded_site_is_unchanged(client):
 
 def test_assets_are_refused_when_no_directory_was_given(client):
     assert client.get("/static/logo.png").status_code == 404
+
+
+# ------------------------------------------- what a module page actually says
+
+def test_the_main_ontology_is_the_one_the_file_declares(client):
+    """`seas-1.0.ttl` is about `https://w3id.org/seas/`, not about
+    `…/seas/seas`. Building the IRI from the file name lost its title, its
+    description and its thirty-seven imports."""
+    body = client.get("/seas").get_data(as_text=True)
+    assert "<code>https://w3id.org/seas/</code>" in body
+    imports = body[body.index("<dt>Imports</dt>"):body.index("<dt>Terms</dt>")]
+    assert imports.count('<li><a class="t"') == 37
+
+
+def test_a_module_that_agrees_with_its_file_name_is_unchanged(client):
+    body = client.get("/BuildingOntology").get_data(as_text=True)
+    assert "<code>https://w3id.org/seas/BuildingOntology</code>" in body
+
+
+def test_markdown_in_a_description_is_rendered(client):
+    """SEAS has written its descriptions in Markdown since 2016 — links,
+    images and fenced Turtle examples. Escaping them shows the reader
+    `[SSN](http://…)` where the 2016 site showed a link."""
+    body = client.get("/FeatureOfInterestOntology").get_data(as_text=True)
+    assert '<a href="https://w3id.org/seas/SSNAlignment">' in body
+    assert "<pre><code>" in body                       # the Turtle examples
+    assert '<img alt="Overview of the System ontology"' in body
+    assert "[SSNAlignment](" not in body               # not left as source
+
+
+def test_a_module_documents_its_terms_in_place(client):
+    """What the 2016 site did, and what a reader came for: the definition of
+    each term, on the page of the module that defines it."""
+    body = client.get("/ThermodynamicSystemOntology").get_data(as_text=True)
+    assert 'id="ThermodynamicSystem"' in body
+    assert "The class of systems that produce, dissipate" in body
+    assert "exchanges heat with" in body               # a property's label
+    assert "<b>domain</b>" in body and "<b>range</b>" in body
+    assert "<span class=\"pill\">Class</span>" in body  # not the owl: IRI
+
+
+@pytest.fixture(scope="module")
+def by_source():
+    application = from_files([SOURCES], SEAS_NS, "seas", order="source")
+    application.config["TESTING"] = True
+    return application.test_client()
+
+
+def test_source_order_keeps_a_family_together(by_source):
+    """`GenericPropertyOntology` writes `TemperatureProperty`,
+    `TemperatureEvaluation` and `temperature` one after the other. Grouping
+    by kind scatters those three across two sections."""
+    body = by_source.get("/GenericPropertyOntology").get_data(as_text=True)
+    order = [body.index('id="%s"' % name) for name in
+             ("TemperatureProperty", "TemperatureEvaluation", "temperature",
+              "NoiseLevelProperty")]
+    assert order == sorted(order)
+    assert "<h2>Classes" not in body                   # one flat list
+
+
+def test_grouping_by_kind_is_the_default(client):
+    body = client.get("/GenericPropertyOntology").get_data(as_text=True)
+    assert "<h2>Classes" in body and "<h2>Properties" in body
+    assert body.index('id="LengthProperty"') < body.index('id="temperature"')
+
+
+# ------------------------------------------------- figures under the namespace
+
+@pytest.fixture(scope="module")
+def with_assets(tmp_path_factory):
+    assets = tmp_path_factory.mktemp("figures")
+    (assets / "featureofinterest.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    application = from_files([SOURCES], SEAS_NS, "seas", assets=str(assets))
+    application.config["TESTING"] = True
+    return application.test_client()
+
+
+def test_a_figure_is_served_under_the_namespace(with_assets):
+    """The descriptions point at `https://w3id.org/seas/featureofinterest.png`
+    and that IRI is this server's to answer."""
+    assert with_assets.get("/featureofinterest.png").status_code == 200
+    assert with_assets.get("/static/featureofinterest.png").status_code == 200
+
+
+def test_a_module_still_wins_over_a_file_of_the_same_name(with_assets):
+    assert with_assets.get("/BuildingOntology").status_code == 200
+
+
+def test_an_asset_cannot_escape_its_directory(with_assets):
+    assert with_assets.get("/../../etc/passwd").status_code in (400, 404)
+    assert with_assets.get("/nowhere.png").status_code == 404

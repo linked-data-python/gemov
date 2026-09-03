@@ -22,6 +22,8 @@ dimensions, at which degree.
 import html
 import os
 
+from rdflib import URIRef
+
 from .cache import local, short
 from .queries import describe, module_contents, ontology_header
 
@@ -47,6 +49,13 @@ STYLE = """
  dl{margin:.4rem 0;display:grid;grid-template-columns:max-content 1fr;gap:.15rem .9rem}
  dt{color:var(--dim);font-size:.85rem} dd{margin:0}
  p.d{white-space:pre-wrap;margin:.5rem 0}
+ .d p{margin:.6rem 0} .d img{max-width:100%;height:auto;display:block;
+      margin:1rem auto} .d ul{padding-left:1.3rem}
+ .d pre{background:var(--soft);border:1px solid var(--rule);padding:.7rem;
+        overflow:auto;font-size:.82rem;border-radius:.2rem}
+ .d code{background:var(--soft);padding:.05rem .25rem;border-radius:.2rem}
+ .d pre code{background:none;padding:0}
+ .d blockquote{margin:.6rem 0;padding-left:.8rem;border-left:3px solid var(--rule);color:var(--dim)}
  .cols{display:flex;flex-wrap:wrap;gap:1.6rem} .cols>section{flex:1 1 15rem;min-width:0}
  .pill{display:inline-block;background:var(--soft);border:1px solid var(--rule);
        border-radius:1rem;padding:.02rem .5rem;font-size:.8rem;color:var(--dim)}
@@ -54,6 +63,15 @@ STYLE = """
      overflow:auto;font-size:.82rem;border-radius:.2rem}
  nav.f{margin-top:2.5rem;font-size:.86rem;color:var(--dim);
        border-top:1px solid var(--rule);padding-top:.7rem}
+ section.term{border-top:1px solid var(--rule);padding-top:.9rem;
+              margin-top:1.4rem}
+ section.term h3{margin:0 0 .2rem;font-size:1.02rem;color:var(--brand)}
+ section.term h3 a{color:inherit;text-decoration:none}
+ section.term h3 a:hover{text-decoration:underline}
+ .tiri{font-size:.8rem;color:var(--dim);margin-bottom:.35rem}
+ p.rel{font-size:.85rem;color:var(--dim);margin:.5rem 0 0}
+ p.rel span{margin-right:.2rem} p.rel b{color:var(--ink);font-weight:500}
+ p.toc{font-size:.85rem;margin:.3rem 0 .2rem;line-height:1.9}
  table{border-collapse:collapse;font-size:.9rem} td,th{text-align:left;
    padding:.2rem .8rem .2rem 0;vertical-align:top} th{color:var(--dim);font-weight:500}
 """
@@ -61,6 +79,51 @@ STYLE = """
 
 def esc(text):
     return html.escape(str(text))
+
+
+def _markdown():
+    """Python-Markdown, if it is installed.
+
+    The descriptions and comments of a published vocabulary are prose, and
+    SEAS has written that prose in **Markdown** since 2016 — links, images,
+    bullet lists and fenced Turtle examples, in `dcterms:description` and
+    `rdfs:comment`. Rendering it as plain text shows the reader
+    `[SSN](http://…)` where the 2016 site showed a link, which is not a
+    detail: the examples are the documentation.
+
+    It stays optional. Without it the prose is escaped and shown as it is
+    written, which is what this did before."""
+    try:
+        import markdown
+    except ImportError:                                      # pragma: no cover
+        return None
+    return markdown.Markdown(extensions=["fenced_code", "tables",
+                                         "sane_lists", "attr_list"])
+
+
+_MD = _markdown()
+
+
+def prose(texts):
+    """One or more Markdown paragraphs, as HTML.
+
+    The content comes from the vocabulary's own source files, which are as
+    trusted as the code that renders them; nothing is sanitised beyond what
+    Markdown does, and a vocabulary you would not run is a vocabulary you
+    would not serve either."""
+    if isinstance(texts, str):
+        texts = [texts]
+    out = []
+    for text in texts:
+        text = (text or "").strip()
+        if not text:
+            continue
+        if _MD is None:
+            out.append('<p class="d">%s</p>' % esc(text))
+        else:
+            _MD.reset()
+            out.append('<div class="d">%s</div>' % _MD.convert(text))
+    return "".join(out)
 
 
 def _brand_style(brand):
@@ -134,7 +197,7 @@ def render_term(graph, iri, namespace, prefix="", home_label=None,
     title = data["labels"][0] if data["labels"] else local(iri, namespace)
     body = []
     if data["comments"]:
-        body.append('<p class="d">%s</p>' % esc(data["comments"][0]))
+        body.append(prose(data["comments"]))
     body.append(_dl([
         ("IRI", "<code>%s</code>" % esc(iri)),
         ("Type", ", ".join('<span class="pill">%s</span>'
@@ -162,15 +225,101 @@ def render_term(graph, iri, namespace, prefix="", home_label=None,
                 "".join(body), home="index" + suffix, brand=brand)
 
 
+#: How the terms of a module are laid out on its page.
+#:
+#: `kind` reproduces the 2016 site: Classes, then Object properties, then the
+#: rest, alphabetically within each. It is easy to scan and it is what a
+#: reader of the published SEAS is used to.
+#:
+#: `source` follows the order the terms were written in — or, for a generated
+#: vocabulary, minted in. It keeps a family together:
+#: `GenericPropertyOntology` writes `TemperatureProperty`,
+#: `TemperatureEvaluation` and `temperature` one after the other, and `kind`
+#: scatters those three across two sections and eleven screens.
+ORDERS = ("kind", "source")
+
+
+def _kind(iri):
+    """`owl:Class` reads as *Class*.
+
+    A term's types come from OWL and RDFS, not from the vocabulary's own
+    namespace, so `short()` — which compacts what is inside the namespace —
+    leaves them as full IRIs. The last segment is the name in every
+    vocabulary that names its types at all, and it is what a reader wants to
+    see on a badge."""
+    tail = iri.rstrip("/").rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+    return tail or iri
+
+
+def _term_block(graph, iri, namespace, prefix, suffix):
+    """A term's documentation, inline in its module's page."""
+    data = describe(graph, iri)
+    name = local(iri, namespace)
+    label = data["labels"][0] if data["labels"] else name
+    kinds = " ".join('<span class="pill">%s</span>' % esc(_kind(k))
+                     for k in sorted(data["kinds"]))
+    rows = []
+    for title, key in (("sub class of", "parents"),
+                       ("equivalent to", "equivalents"),
+                       ("sub property of", "sub_of"),
+                       ("domain", "domain"), ("range", "range"),
+                       ("sub classes", "children"),
+                       ("domain of", "domain_of"),
+                       ("range of", "range_of"),
+                       ("sub properties", "sub_properties")):
+        values = data.get(key)
+        if values:
+            rows.append("<span><b>%s</b> %s</span>" % (
+                title, ", ".join(
+                    '<a class="t" href="%s%s">%s</a>'
+                    % (esc(local(v, namespace)), suffix,
+                       esc(short(v, namespace, prefix)))
+                    if v.startswith(namespace) else "<code>%s</code>" % esc(v)
+                    for v in values)))
+    return ('<section class="term" id="%s"><h3><a href="%s%s">%s</a> %s</h3>'
+            '<div class="tiri"><code>%s</code></div>%s%s</section>'
+            % (esc(name), esc(name), suffix, esc(label), kinds, esc(iri),
+               prose(data["comments"]),
+               '<p class="rel">%s</p>' % " · ".join(rows) if rows else ""))
+
+
+def _module_terms(module_version, contents, namespace, prefix, suffix, order):
+    """Every term the module defines, documented, in the asked-for order."""
+    graph = module_version.graph
+    if order == "source":
+        positions = module_version.declaration_order()
+        everything = (contents["classes"] + contents["properties"]
+                      + contents["other"])
+        groups = [("Terms", sorted(
+            everything,
+            key=lambda i: (positions.get(URIRef(i), (9, 9e9)), i)))]
+    else:
+        groups = [(label, contents[key]) for label, key in
+                  (("Classes", "classes"), ("Properties", "properties"),
+                   ("Other terms", "other"))]
+    out = []
+    for label, terms in groups:
+        if not terms:
+            continue
+        out.append("<h2>%s (%d)</h2>" % (label, len(terms)))
+        out.append('<p class="toc">%s</p>' % " · ".join(
+            '<a class="t" href="#%s">%s</a>'
+            % (esc(local(i, namespace)), esc(short(i, namespace, prefix)))
+            for i in terms))
+        out.extend(_term_block(graph, i, namespace, prefix, suffix)
+                   for i in terms)
+    return "".join(out)
+
+
 def render_module(module_version, namespace, prefix="", versions=(),
-                  patterns=(), suffix=".html", brand=None):
+                  patterns=(), suffix=".html", brand=None, order="kind"):
     graph = module_version.graph
     header = ontology_header(graph, module_version.iri)
     contents = module_contents(graph, module_version.iri)
     title = header["titles"][0] if header["titles"] else module_version.module
     body = []
     if header["descriptions"]:
-        body.append('<p class="d">%s</p>' % esc(header["descriptions"][0]))
+        body.append(prose(header["descriptions"]))
     body.append(_dl([
         ("IRI", "<code>%s</code>" % esc(module_version.iri)),
         ("Version", esc(module_version.version)),
@@ -189,12 +338,8 @@ def render_module(module_version, namespace, prefix="", versions=(),
             '<span class="pill">degree %d</span></li>'
             % (esc(p["name"]), suffix, esc(p["name"]), p["degree"])
             for p in patterns))
-    for label, key in (("Classes", "classes"), ("Properties", "properties"),
-                       ("Other terms", "other")):
-        if contents[key]:
-            body.append("<h2>%s (%d)</h2>%s"
-                        % (label, len(contents[key]),
-                           _links(contents[key], namespace, prefix, suffix)))
+    body.append(_module_terms(module_version, contents, namespace, prefix,
+                              suffix, order))
     return page(title, "<code>%s</code> · version %s"
                 % (esc(module_version.iri), esc(module_version.version)),
                 "".join(body), home="index" + suffix, brand=brand)
@@ -249,7 +394,7 @@ def pattern_facts(context, config):
 def render_pattern(fact, namespace, prefix="", suffix=".html", brand=None):
     body = []
     if fact["doc"]:
-        body.append('<p class="d">%s</p>' % esc(fact["doc"]))
+        body.append(prose(fact["doc"]))
     body.append(_dl([
         ("Defined in", "<code>%s</code>" % esc(fact["source"])),
         ("Mints into", '<a href="%s%s">%s</a>'
@@ -288,7 +433,8 @@ def render_patterns_index(facts, suffix=".html", brand=None):
 
 # ------------------------------------------------------------ static site
 
-def write_site(source, directory, prefix="", config=None, brand=None):
+def write_site(source, directory, prefix="", config=None, brand=None,
+               order="kind"):
     """Write the whole documentation as files — what `saref-pypeline` does for
     SAREF. Returns the list of paths written."""
     os.makedirs(directory, exist_ok=True)
@@ -311,7 +457,8 @@ def write_site(source, directory, prefix="", config=None, brand=None):
             mv = source.versions[module][version]
             module_patterns = [f for f in facts if f["module"] == module]
             html_text = render_module(mv, namespace, prefix, versions,
-                                      module_patterns, brand=brand)
+                                      module_patterns, brand=brand,
+                                      order=order)
             put("%s-%s.html" % (module, version), html_text)
             if version == versions[-1]:
                 put("%s.html" % module, html_text)

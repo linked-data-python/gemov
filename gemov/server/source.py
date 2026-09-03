@@ -20,6 +20,14 @@ import re
 from rdflib import Graph, RDFS, URIRef
 from rdflib.namespace import OWL, RDF
 
+#: A token that opens a line in Turtle is a subject: `<iri>`, `<relative>` or
+#: `prefix:local`. Indentation is allowed — SEAS indents several of its
+#: declarations by a single space, and a scan that missed those would drop
+#: eight terms of `GenericPropertyOntology` to the end of its page.
+_SUBJECT = re.compile(
+    r"^[ \t]*(?:<([^>\s]*)>|([A-Za-z][\w.-]*):([^\s;,.()\[\]]+))"
+    r"(?=[\s;,.])", re.M)
+
 #: `ActorOntology-0.9.ttl`
 FILE = re.compile(r"^(?P<module>[A-Za-z][A-Za-z0-9]*)-"
                   r"(?P<version>[0-9]+(?:\.[0-9]+)*)\.ttl$")
@@ -39,6 +47,7 @@ class ModuleVersion:
         self._loader = loader
         self.sources = list(sources)
         self._graph = None
+        self._order = None
 
     @property
     def graph(self):
@@ -48,11 +57,83 @@ class ModuleVersion:
 
     @property
     def iri(self):
-        return URIRef(self.namespace + self.module)
+        """The ontology this file is about — **as it declares itself**.
+
+        The name of a file is a convention; the `owl:Ontology` subject is a
+        statement. They agree for every SEAS module but one, and that one is
+        the important one: `seas-1.0.ttl` is the main ontology, whose IRI is
+        the namespace itself, `https://w3id.org/seas/`. Building the IRI from
+        the file name gave `…/seas/seas`, which nothing in the graph is about,
+        so its title, its description and its **thirty-seven imports** were
+        all silently absent from its page.
+
+        The built IRI stays the answer whenever the file agrees with it, or
+        says nothing, or says several things: a rule that only fires on an
+        unambiguous disagreement cannot make a page worse than it was.
+        """
+        built = URIRef(self.namespace + self.module)
+        declared = {s for s in self.graph.subjects(RDF.type, OWL.Ontology)
+                    if str(s).startswith(self.namespace)}
+        if len(declared) == 1:
+            return declared.pop()
+        return built
 
     def terms(self):
         return {s for s in self.graph.subjects(RDFS.isDefinedBy, self.iri)
                 if str(s).startswith(self.namespace)}
+
+    def set_order(self, terms):
+        """Impose the order instead of reading it back from a file."""
+        self._order = {term: (0, i) for i, term in enumerate(terms)}
+
+    def declaration_order(self):
+        """term IRI -> where it first appears as a subject in the source.
+
+        A hand-written ontology is written in an order, and that order is
+        documentation. `GenericPropertyOntology` declares
+        `TemperatureProperty`, `TemperatureEvaluation` and `temperature`
+        together, one quantity after another; sorting its terms
+        alphabetically and splitting them by kind — what the 2016 site did —
+        scatters each of those families across two sections and eleven
+        screens.
+
+        An RDF graph has no order, so it is read back from the text: for
+        each term, the first line that begins with its IRI or with one of the
+        compact forms of it that the file's own prefixes allow. A term the
+        scan does not find sorts last, and the caller falls back to the
+        alphabet — a missing position degrades the order, it does not break
+        it.
+
+        Generated modules have no text; there the order is the one the
+        patterns minted in, which `Generated` supplies instead."""
+        if self._order is None:
+            self._order = self._scan_order()
+        return self._order
+
+    def _scan_order(self):
+        """One pass per file: every token that opens a line is a subject."""
+        prefixes = {p for p, ns in self.graph.namespaces()
+                    if str(ns) == self.namespace}
+        wanted = {str(term): term for term in self.terms()}
+        order = {}
+        for base, path in enumerate(self.sources):
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    text = handle.read()
+            except OSError:                                  # pragma: no cover
+                continue
+            for match in _SUBJECT.finditer(text):
+                full, pfx, local = match.group(1), match.group(2), match.group(3)
+                if full is not None:
+                    iri = full if "://" in full else self.namespace + full
+                elif pfx in prefixes:
+                    iri = self.namespace + local
+                else:
+                    continue
+                term = wanted.get(iri)
+                if term is not None and term not in order:
+                    order[term] = (base, match.start())
+        return order
 
     def stamp(self):
         """What the cache keys on: the mtimes of what this was built from."""
@@ -157,9 +238,15 @@ class Generated(Source):
         self.context = context
         sources = [config.path] if config.path else []
         for module, graph in context.modules.items():
-            self.versions[module] = {version: ModuleVersion(
+            module_version = ModuleVersion(
                 module, version, config.base, (lambda g=graph: g),
-                sources=sources)}
+                sources=sources)
+            # A generated module has no text to read an order back from, and
+            # does not need one: the patterns minted its terms in an order,
+            # and that order is the product of the dimensions — the same
+            # grouping a hand-written file achieves by discipline.
+            module_version.set_order(context.minted.get(module, []))
+            self.versions[module] = {version: module_version}
 
 
 def _parse(path):

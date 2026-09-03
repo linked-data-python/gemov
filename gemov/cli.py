@@ -61,6 +61,7 @@ def main(argv=None):
     docs.add_argument("--prefix", default="")
     docs.add_argument("--brand", help="a YAML file: logo, name, project link, "
                       "footer note (see gemov.doc.brand)")
+    docs.add_argument("--order", default="kind", choices=("kind", "source"))
 
     serve = sub.add_parser("serve", help="serve the vocabulary over HTTP")
     serve.add_argument("config", nargs="?")
@@ -75,6 +76,11 @@ def main(argv=None):
                        "link, footer note (see gemov.doc.brand)")
     serve.add_argument("--assets", help="a directory served under "
                        "<mount>/static/ — where the logo lives")
+    serve.add_argument("--order", default="kind", choices=("kind", "source"),
+                       help="how a module lays out its terms: grouped by "
+                            "kind and alphabetical (default, what the 2016 "
+                            "SEAS site did), or in the order they were "
+                            "written")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=5000)
 
@@ -86,7 +92,8 @@ def main(argv=None):
         except ImportError:
             raise SystemExit("the server is optional: pip install 'gemov[server]'")
         brand = _brand(args.brand)
-        common = dict(mount=args.mount, brand=brand, assets=args.assets)
+        common = dict(mount=args.mount, brand=brand, assets=args.assets,
+                      order=args.order)
         if args.config:
             application = from_config(Config.load(args.config), args.prefix,
                                       **common)
@@ -115,7 +122,7 @@ def main(argv=None):
             raise SystemExit("the documentation needs Linked-Data Python: "
                              "pip install 'gemov[docs]' (%s)" % exc)
         written = write_site(Generated(config), args.out, args.prefix, config,
-                             brand=_brand(args.brand))
+                             brand=_brand(args.brand), order=args.order)
         print("%d pages in %s" % (len(written), args.out))
         return 0
 

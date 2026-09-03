@@ -29,6 +29,11 @@ def describe(graph, iri):
     parents = [str(o) for o in m{ {term} rdfs:subClassOf ?p } if isinstance(o, URIRef)]
     equivalents = [str(o) for o in m{ {term} owl:equivalentClass ?e } if isinstance(o, URIRef)]
 
+    # what a PROPERTY is: the two ends it relates, and what it refines
+    sub_of = [str(o) for o in m{ {term} rdfs:subPropertyOf ?p } if isinstance(o, URIRef)]
+    domain = [str(o) for o in m{ {term} rdfs:domain ?d } if isinstance(o, URIRef)]
+    range_ = [str(o) for o in m{ {term} rdfs:range ?r } if isinstance(o, URIRef)]
+
     # what points at it, which is what tells a reader where the term is used
     children = [str(s) for s in m{ ?s rdfs:subClassOf {term} }]
     domain_of = [str(s) for s in m{ ?s rdfs:domain {term} }]
@@ -41,6 +46,8 @@ def describe(graph, iri):
         "status": status[0] if status else None,
         "defined_by": defined_by,
         "kinds": kinds, "parents": parents, "equivalents": equivalents,
+        "sub_of": sorted(sub_of), "domain": sorted(domain),
+        "range": sorted(range_),
         "children": sorted(children), "domain_of": sorted(domain_of),
         "range_of": sorted(range_of), "sub_properties": sorted(sub_properties),
     }

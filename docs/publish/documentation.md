@@ -28,6 +28,55 @@ children = [str(s) for s in m{ ?s rdfs:subClassOf {term} }]
 range_of = [str(s) for s in m{ ?s rdfs:range {term} }]
 ```
 
+## A module page carries its terms
+
+A module's page is not a table of contents: it **is** the documentation of
+the terms the module defines. Each one gets its label, its types, its IRI, its
+comment and the relations that place it — *sub class of*, *domain*, *range*,
+*domain of*, *range of*. That is what the 2016 SEAS site did, and what a
+reader came for; a page that only links to elsewhere makes the reader open
+one tab per term.
+
+### Prose is Markdown
+
+A published vocabulary's `dcterms:description` and `rdfs:comment` are prose,
+and SEAS has written that prose in Markdown since 2016 — links, images, bullet
+lists and fenced Turtle examples. It is rendered. Showing the reader
+`[SSN](http://…)` where the 2016 site showed a link is not a cosmetic loss:
+in SEAS the examples *are* the documentation.
+
+The dependency is optional. Without `markdown` installed the prose is escaped
+and shown as written.
+
+### The order of the terms — `--order`
+
+Two policies, and which one is right is a question about the vocabulary, not
+about the tool.
+
+`kind` *(default)* groups the terms — Classes, then Properties, then the rest
+— and sorts each group alphabetically. This is what the 2016 site did. It is
+easy to scan, and it is what a reader of the published SEAS is used to.
+
+`source` follows the order the terms were **written** in, flat. An RDF graph
+has no order, so it is read back from the Turtle: the first line that begins
+with the term. A generated vocabulary has no text and needs none — the
+patterns minted its terms in an order, and that order is the product of the
+dimensions.
+
+The difference is not stylistic. `GenericPropertyOntology` writes
+
+```turtle
+seas:TemperatureProperty a owl:Class ; …
+seas:TemperatureEvaluation a owl:Class ; …
+seas:temperature a owl:ObjectProperty , owl:FunctionalProperty ; …
+```
+
+— a quantity's three terms together, then the next quantity. `kind` scatters
+each of those families across two sections and eleven screens; `source` keeps
+them where their author put them. And it is the same order a pattern produces,
+which is why the choice survives the move from a hand-written vocabulary to a
+generated one.
+
 ## The page a hand-written ontology cannot have
 
 A generated vocabulary knows *why* each family of terms exists, so it can
