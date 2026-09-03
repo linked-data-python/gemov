@@ -236,7 +236,11 @@ class Generated(Source):
         self.dimensions = config.dimensions
         context = config.generate()
         self.context = context
-        sources = [config.path] if config.path else []
+        # every file the configuration was read from, not just the entry
+        # point: a directory of one file per quantity is edited one file at a
+        # time, and the cache has to see that.
+        sources = list(getattr(config, "sources", None)
+                       or ([config.path] if config.path else []))
         for module, graph in context.modules.items():
             module_version = ModuleVersion(
                 module, version, config.base, (lambda g=graph: g),

@@ -12,6 +12,9 @@ gemov serve   --files DIR… --namespace IRI [--prefix P]        # needs [server
 
 Every entry point is also `python -m gemov.cli …`.
 
+`CONFIG` is a YAML file **or a directory** laid out as one — see
+[configuration](configuration.md#as-a-directory).
+
 ## `build`
 
 Runs every pattern of every module. Without `-o`, the whole vocabulary goes to

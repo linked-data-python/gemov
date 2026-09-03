@@ -244,3 +244,90 @@ def test_the_degree_of_a_pattern_is_its_arity():
     assert context.degree(patterns.upper.gemov_pattern) == 0
     assert context.degree(patterns.property_family.gemov_pattern) == 1
     assert context.degree(patterns.aggregated_evaluation.gemov_pattern) == 2
+
+
+# ------------------------------------------- a configuration as a directory
+
+def _tree(root):
+    """The example vocabulary, written as a directory instead of a file."""
+    (root / "dimensions" / "quantity").mkdir(parents=True)
+    (root / "dimensions" / "aggregation").mkdir(parents=True)
+    (root / "modules").mkdir()
+    (root / "config.yaml").write_text(
+        "base: https://w3id.org/seas/\n"
+        "prefixes:\n  seas: https://w3id.org/seas/\n")
+    (root / "dimensions" / "quantity" / "Temperature.yaml").write_text(
+        "kind: ThermodynamicQuantity\n")
+    (root / "dimensions" / "quantity" / "Pressure.yml").write_text(
+        "kind: MechanicalQuantity\n")
+    (root / "dimensions" / "aggregation" / "Average.yaml").write_text("{}\n")
+    (root / "modules" / "GenericPropertyOntology.yml").write_text(
+        "title: The SEAS generic property ontology\n"
+        "patterns:\n  patterns.property_family: [ quantity ]\n")
+    (root / "README.md").write_text("not a configuration file\n")
+    return root
+
+
+def test_a_directory_is_a_configuration(tmp_path):
+    """One rule: a directory is a mapping, a file is one of its entries.
+
+    A vocabulary of ninety-eight quantities stops being one file nobody can
+    review — a change to one quantity is a change to one file."""
+    from gemov import Config
+    config = Config.load(str(_tree(tmp_path / "vocabulary")))
+    assert config.base == "https://w3id.org/seas/"
+    assert config.prefixes["seas"] == "https://w3id.org/seas/"
+    assert sorted(config.dimensions["quantity"]) == ["Pressure", "Temperature"]
+    assert config.dimensions["quantity"]["Temperature"] == {
+        "kind": "ThermodynamicQuantity"}
+    assert sorted(config.dimensions["aggregation"]) == ["Average"]
+    assert list(config.modules) == ["GenericPropertyOntology"]
+
+
+def test_the_tree_and_the_file_mean_the_same_thing(tmp_path):
+    from gemov import Config
+    tree = Config.load(str(_tree(tmp_path / "vocabulary")))
+    flat = tmp_path / "vocabulary.yml"
+    flat.write_text(
+        "base: https://w3id.org/seas/\n"
+        "prefixes:\n  seas: https://w3id.org/seas/\n"
+        "dimensions:\n"
+        "  quantity:\n"
+        "    Temperature: { kind: ThermodynamicQuantity }\n"
+        "    Pressure: { kind: MechanicalQuantity }\n"
+        "  aggregation:\n    Average: {}\n"
+        "modules:\n  GenericPropertyOntology:\n"
+        "    title: The SEAS generic property ontology\n"
+        "    patterns:\n      patterns.property_family: [ quantity ]\n")
+    other = Config.load(str(flat))
+    assert tree.base == other.base
+    assert tree.dimensions == other.dimensions
+    assert tree.modules == other.modules
+
+
+def test_what_is_not_yaml_is_left_alone(tmp_path):
+    """A `README.md` or a `patterns.py` may live in the tree."""
+    from gemov.config import read_tree
+    root = _tree(tmp_path / "vocabulary")
+    assert "README" not in read_tree(str(root))
+
+
+def test_the_cache_sees_every_file_of_the_tree(tmp_path):
+    """A directory's own mtime does not move when a quantity inside it is
+    edited; a cache keyed on it would serve a stale page."""
+    from gemov import Config
+    root = _tree(tmp_path / "vocabulary")
+    config = Config.load(str(root))
+    names = {os.path.basename(p) for p in config.sources}
+    assert {"config.yaml", "Temperature.yaml", "Pressure.yml",
+            "GenericPropertyOntology.yml"} <= names
+
+
+def test_config_yaml_must_be_a_mapping(tmp_path):
+    from gemov.config import read_tree
+    root = tmp_path / "vocabulary"
+    root.mkdir()
+    (root / "config.yaml").write_text("- a list\n")
+    with pytest.raises(ValueError) as exc:
+        read_tree(str(root))
+    assert "belong to the directory" in str(exc.value)

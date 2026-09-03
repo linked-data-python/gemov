@@ -48,6 +48,70 @@ KEYS = {"base", "prefixes", "import", "dimensions", "with dimensions",
         "modules", "specialize", "default module"}
 
 
+#: A file whose keys belong to the mapping that CONTAINS it, rather than to a
+#: key of its own name. `config.yaml` at the root of a vocabulary is where
+#: `base` and `prefixes` go.
+INLINE = ("config.yaml", "config.yml")
+SUFFIXES = (".yaml", ".yml")
+
+
+def read_tree(directory):
+    """A configuration written as a directory tree.
+
+    One rule, applied recursively: **a directory is a mapping**, a file is
+    one of its entries, and a sub-directory is a nested mapping.
+
+        vocabulary/
+          config.yaml                 base, prefixes — merged in place
+          dimensions/
+            quantity/
+              Acceleration.yaml       dimensions.quantity.Acceleration
+              Temperature.yaml
+          modules/
+            FeatureOfInterestOntology.yml   modules.FeatureOfInterestOntology
+
+    is exactly the file this would otherwise be, and means the same thing.
+    The point is not the syntax, it is that a vocabulary of ninety-eight
+    quantities stops being one file that nobody can review: a change to one
+    quantity is a change to one file, a pull request reads as what it does,
+    and two people editing two quantities do not conflict.
+
+    `config.yaml` is the one name with a meaning — its keys belong to the
+    mapping that contains it. Everything else takes its key from its name,
+    without the extension. Hidden files and anything that is not YAML are
+    ignored, so a `README.md` or a `patterns.py` can live in the tree.
+    """
+    out = {}
+    for entry in sorted(os.listdir(directory)):
+        if entry.startswith("."):
+            continue
+        path = os.path.join(directory, entry)
+        if os.path.isdir(path):
+            out[entry] = read_tree(path)
+        elif entry in INLINE:
+            with open(path, encoding="utf-8") as f:
+                inline = yaml.safe_load(f) or {}
+            if not isinstance(inline, dict):
+                raise ValueError("%s: %s must be a mapping — its keys belong "
+                                 "to the directory that holds it"
+                                 % (path, entry))
+            out.update(inline)
+        elif entry.endswith(SUFFIXES):
+            with open(path, encoding="utf-8") as f:
+                out[entry.rsplit(".", 1)[0]] = yaml.safe_load(f)
+    return out
+
+
+def tree_files(directory):
+    """Every YAML file a directory configuration is read from."""
+    out = []
+    for root, dirs, names in os.walk(directory):
+        dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+        out.extend(os.path.join(root, n) for n in sorted(names)
+                   if n.endswith(SUFFIXES) and not n.startswith("."))
+    return out
+
+
 class Config:
     def __init__(self, path=None):
         self.path = os.path.abspath(path) if path else None
@@ -56,30 +120,46 @@ class Config:
         self.dimensions = {}
         self.modules = {}                 # name -> {"title":…, "patterns": {}}
         self.default_module = "Ontology"
+        #: every file the configuration was actually read from, imports and
+        #: the files of a directory tree included. It is what a cache keys on:
+        #: a directory's own mtime does not move when a quantity inside it is
+        #: edited, and the page would then be served stale.
+        self.sources = []
 
     # ------------------------------------------------------------ loading
 
     @classmethod
     def load(cls, path):
+        """A configuration, from a file **or a directory**.
+
+        See `read_tree` for what a directory means: the same configuration,
+        with each level of the mapping as a level of the file system."""
         config = cls(path)
-        config._merge_file(config.path, seen=set())
+        config._merge_source(config.path, seen=set())
         return config
 
-    def _merge_file(self, path, seen):
+    def _merge_source(self, path, seen):
         path = os.path.abspath(path)
         if path in seen:                  # a cycle in `import` is not an error
             return
         seen.add(path)
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+        if os.path.isdir(path):
+            data, here = read_tree(path), path
+            self.sources.extend(tree_files(path))
+        else:
+            with open(path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            here = os.path.dirname(path)
+            self.sources.append(path)
+        if not isinstance(data, dict):
+            raise ValueError("%s: a configuration is a mapping" % path)
         unknown = set(data) - KEYS
         if unknown:
             raise ValueError("%s: unknown key(s) %s"
                              % (path, ", ".join(sorted(unknown))))
-        here = os.path.dirname(path)
         imports = data.get("import") or []
         for other in ([imports] if isinstance(imports, str) else imports):
-            self._merge_file(os.path.join(here, other), seen)
+            self._merge_source(os.path.join(here, other), seen)
 
         self.base = data.get("base", self.base)
         self.default_module = data.get("default module", self.default_module)
