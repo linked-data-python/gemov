@@ -238,12 +238,31 @@ def test_a_pattern_can_take_its_dimensions_by_role():
 
 
 def test_the_degree_of_a_pattern_is_its_arity():
+    """Asked for the way gemov asks: a pattern module is imported under a
+    name of its own, so `import patterns` is not the same object."""
+    from gemov.patterns import load
     context = config().generate()
-    from importlib import import_module
-    patterns = import_module("patterns")
-    assert context.degree(patterns.upper.gemov_pattern) == 0
-    assert context.degree(patterns.property_family.gemov_pattern) == 1
-    assert context.degree(patterns.aggregated_evaluation.gemov_pattern) == 2
+    assert context.degree(load("patterns.upper").gemov_pattern) == 0
+    assert context.degree(load("patterns.property_family").gemov_pattern) == 1
+    assert context.degree(
+        load("patterns.aggregated_evaluation").gemov_pattern) == 2
+
+
+def test_two_vocabularies_may_each_have_a_patterns_module(tmp_path):
+    """gemov serves two vocabularies in one process. Importing both pattern
+    modules as `patterns` gave the second one the first one's functions, and
+    the error pointed at the innocent file."""
+    from gemov.patterns import load, add_search_path
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    (other / "patterns.py").write_text(
+        "from gemov import pattern\n\n\n"
+        "@pattern\ndef only_here(context):\n    pass\n")
+    first = load("patterns.property_family")
+    add_search_path(str(other))
+    assert load("patterns.only_here").__name__ == "only_here"
+    add_search_path(os.path.join(ROOT, "examples", "seas"))
+    assert load("patterns.property_family") is first
 
 
 # ------------------------------------------- a configuration as a directory

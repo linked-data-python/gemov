@@ -230,6 +230,9 @@ class Generated(Source):
     """A gemov configuration: the modules are produced by the patterns."""
 
     def __init__(self, config, version="1.0"):
+        """`version` is the version the generated modules are published at.
+        It is not a detail: generating at `1.0` next to a published `1.0`
+        would put two different graphs at the same versioned IRI."""
         super().__init__()
         self.config = config
         self.namespace = config.base
@@ -251,6 +254,75 @@ class Generated(Source):
             # grouping a hand-written file achieves by discipline.
             module_version.set_order(context.minted.get(module, []))
             self.versions[module] = {version: module_version}
+
+
+class Combined(Source):
+    """Several sources, served as **one** vocabulary.
+
+    A vocabulary that is partly hand-written and partly generated is still
+    one vocabulary, and its reader has no business telling the halves apart.
+    `https://w3id.org/seas/TemperatureProperty` answers the same way whether
+    a pattern minted it or somebody typed it, and a module whose terms come
+    from both is one module with one page.
+
+    Merging is per **(module, version)**: the same module at the same version
+    in two sources is one module version whose graph is the union. That is
+    what lets a generated family and a hand-written remainder share a module
+    without either knowing about the other.
+
+    The namespace must be the same everywhere — two namespaces are two
+    vocabularies, and serving them as one would make every relative link
+    ambiguous.
+    """
+
+    def __init__(self, sources):
+        super().__init__()
+        sources = list(sources)
+        if not sources:
+            raise ValueError("a combined source needs at least one source")
+        namespaces = {s.namespace for s in sources}
+        if len(namespaces) > 1:
+            raise ValueError("a combined source serves one namespace; got %s"
+                             % ", ".join(sorted(namespaces)))
+        self.sources = sources
+        self.namespace = sources[0].namespace
+        # a generated part carries the dimensions a view can select, and the
+        # patterns a reflexive page documents; the first one that has them
+        # answers for the whole
+        for source in sources:
+            if getattr(source, "dimensions", None):
+                self.dimensions = source.dimensions
+            for attribute in ("context", "config"):
+                if hasattr(source, attribute) and not hasattr(self, attribute):
+                    setattr(self, attribute, getattr(source, attribute))
+        for source in sources:
+            for module, versions in source.versions.items():
+                for version, module_version in versions.items():
+                    held = self.versions.setdefault(module, {}).get(version)
+                    self.versions[module][version] = (
+                        module_version if held is None
+                        else _merged(held, module_version))
+
+
+def _merged(first, second):
+    """One module version out of two — the union of what they say."""
+    def load():
+        graph = Graph()
+        for part in (first, second):
+            graph += part.graph
+            for prefix, iri in part.graph.namespaces():
+                graph.namespace_manager.bind(prefix, iri, replace=False)
+        return graph
+
+    merged = ModuleVersion(first.module, first.version, first.namespace, load,
+                           sources=list(first.sources) + list(second.sources))
+    order = dict(first.declaration_order())
+    offset = (max((p[0] for p in order.values()), default=0) + 1)
+    for term, position in second.declaration_order().items():
+        order.setdefault(term, (offset + position[0], position[1]))
+    merged.set_order([t for t, _ in sorted(order.items(),
+                                           key=lambda kv: kv[1])])
+    return merged
 
 
 def _parse(path):
